@@ -16,7 +16,7 @@ export function createConversationsCommand(): Command {
     .option('--modified-since <date>', 'Filter by modified date (ISO 8601)')
     .option('--sort-field <field>', 'Sort by field (createdAt, modifiedAt, number, status, subject)')
     .option('--sort-order <order>', 'Sort order (asc, desc)')
-    .option('--page <number>', 'Page number', parseInt)
+    .option('--page <number>', 'Page number')
     .option('--embed <resources>', 'Embed resources (threads)')
     .action(withErrorHandling(async (options: {
       mailbox?: string;
@@ -26,7 +26,7 @@ export function createConversationsCommand(): Command {
       modifiedSince?: string;
       sortField?: string;
       sortOrder?: string;
-      page?: number;
+      page?: string;
       embed?: string;
     }) => {
       const result = await client.listConversations({
@@ -37,7 +37,7 @@ export function createConversationsCommand(): Command {
         modifiedSince: options.modifiedSince,
         sortField: options.sortField,
         sortOrder: options.sortOrder,
-        page: options.page,
+        page: options.page ? parseInt(options.page, 10) : undefined,
         embed: options.embed,
       });
       outputJson(result);
@@ -112,18 +112,18 @@ export function createConversationsCommand(): Command {
     .description('Reply to a conversation')
     .argument('<id>', 'Conversation ID')
     .requiredOption('--text <text>', 'Reply text')
-    .option('--user <id>', 'User ID sending the reply', parseInt)
+    .option('--user <id>', 'User ID sending the reply')
     .option('--draft', 'Save as draft')
     .option('--status <status>', 'Set conversation status after reply (active, closed, pending)')
     .action(withErrorHandling(async (id: string, options: {
       text: string;
-      user?: number;
+      user?: string;
       draft?: boolean;
       status?: string;
     }) => {
       await client.createReply(parseIdArg(id, 'conversation'), {
         text: options.text,
-        user: options.user,
+        user: options.user ? parseIdArg(options.user, 'user') : undefined,
         draft: options.draft,
         status: options.status,
       });
@@ -135,14 +135,14 @@ export function createConversationsCommand(): Command {
     .description('Add a note to a conversation')
     .argument('<id>', 'Conversation ID')
     .requiredOption('--text <text>', 'Note text')
-    .option('--user <id>', 'User ID adding the note', parseInt)
+    .option('--user <id>', 'User ID adding the note')
     .action(withErrorHandling(async (id: string, options: {
       text: string;
-      user?: number;
+      user?: string;
     }) => {
       await client.createNote(parseIdArg(id, 'conversation'), {
         text: options.text,
-        user: options.user,
+        user: options.user ? parseIdArg(options.user, 'user') : undefined,
       });
       outputJson({ message: 'Note added' });
     }));

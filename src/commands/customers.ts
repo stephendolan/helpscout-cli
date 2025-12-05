@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
 import { outputJson } from '../lib/output.js';
-import { withErrorHandling, confirmDelete, parseIdArg } from '../lib/command-utils.js';
+import { withErrorHandling, confirmDelete, parseIdArg, requireAtLeastOneField } from '../lib/command-utils.js';
 
 export function createCustomersCommand(): Command {
   const cmd = new Command('customers').description('Customer operations');
@@ -15,7 +15,7 @@ export function createCustomersCommand(): Command {
     .option('--modified-since <date>', 'Filter by modified date (ISO 8601)')
     .option('--sort-field <field>', 'Sort by field (createdAt, firstName, lastName, modifiedAt)')
     .option('--sort-order <order>', 'Sort order (asc, desc)')
-    .option('--page <number>', 'Page number', parseInt)
+    .option('--page <number>', 'Page number')
     .option('-q, --query <query>', 'Advanced search query')
     .action(withErrorHandling(async (options: {
       mailbox?: string;
@@ -24,7 +24,7 @@ export function createCustomersCommand(): Command {
       modifiedSince?: string;
       sortField?: string;
       sortOrder?: string;
-      page?: number;
+      page?: string;
       query?: string;
     }) => {
       const result = await client.listCustomers({
@@ -34,7 +34,7 @@ export function createCustomersCommand(): Command {
         modifiedSince: options.modifiedSince,
         sortField: options.sortField,
         sortOrder: options.sortOrder,
-        page: options.page,
+        page: options.page ? parseInt(options.page, 10) : undefined,
         query: options.query,
       });
       outputJson(result);
@@ -62,12 +62,14 @@ export function createCustomersCommand(): Command {
       email?: string;
       phone?: string;
     }) => {
-      await client.createCustomer({
+      const data = {
         ...(options.firstName && { firstName: options.firstName }),
         ...(options.lastName && { lastName: options.lastName }),
         ...(options.email && { emails: [{ type: 'work', value: options.email }] }),
         ...(options.phone && { phones: [{ type: 'work', value: options.phone }] }),
-      });
+      };
+      requireAtLeastOneField(data, 'Customer create');
+      await client.createCustomer(data);
       outputJson({ message: 'Customer created' });
     }));
 
@@ -89,14 +91,16 @@ export function createCustomersCommand(): Command {
       organization?: string;
       background?: string;
     }) => {
-      await client.updateCustomer(parseIdArg(id, 'customer'), {
+      const data = {
         ...(options.firstName && { firstName: options.firstName }),
         ...(options.lastName && { lastName: options.lastName }),
         ...(options.jobTitle && { jobTitle: options.jobTitle }),
         ...(options.location && { location: options.location }),
         ...(options.organization && { organization: options.organization }),
         ...(options.background && { background: options.background }),
-      });
+      };
+      requireAtLeastOneField(data, 'Customer update');
+      await client.updateCustomer(parseIdArg(id, 'customer'), data);
       outputJson({ message: 'Customer updated' });
     }));
 

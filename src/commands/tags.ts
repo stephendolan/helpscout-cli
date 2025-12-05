@@ -9,9 +9,9 @@ export function createTagsCommand(): Command {
   cmd
     .command('list')
     .description('List all tags')
-    .option('--page <number>', 'Page number', parseInt)
-    .action(withErrorHandling(async (options: { page?: number }) => {
-      const result = await client.listTags(options.page);
+    .option('--page <number>', 'Page number')
+    .action(withErrorHandling(async (options: { page?: string }) => {
+      const result = await client.listTags(options.page ? parseInt(options.page, 10) : undefined);
       outputJson(result);
     }));
 

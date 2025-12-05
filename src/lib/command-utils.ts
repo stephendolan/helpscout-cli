@@ -21,6 +21,16 @@ export function parseIdArg(value: string, resourceType: string = 'resource'): nu
   return parsed;
 }
 
+export function requireAtLeastOneField(
+  data: Record<string, unknown>,
+  operation: string,
+): void {
+  const hasFields = Object.values(data).some((v) => v !== undefined);
+  if (!hasFields) {
+    throw new HelpScoutCliError(`${operation} requires at least one field to update`, 400);
+  }
+}
+
 export async function confirmDelete(
   resourceType: string,
   skipConfirmation?: boolean,

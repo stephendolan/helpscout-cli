@@ -10,7 +10,7 @@ const store = new Conf<ConfigSchema>({
 
 export const config = {
   getDefaultMailbox(): string | undefined {
-    return store.get('defaultMailbox');
+    return store.get('defaultMailbox') || process.env.HELPSCOUT_MAILBOX_ID;
   },
 
   setDefaultMailbox(mailboxId: string): void {

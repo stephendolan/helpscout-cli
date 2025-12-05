@@ -9,18 +9,18 @@ export function createWorkflowsCommand(): Command {
   cmd
     .command('list')
     .description('List workflows')
-    .option('-m, --mailbox <id>', 'Filter by mailbox ID', parseInt)
+    .option('-m, --mailbox <id>', 'Filter by mailbox ID')
     .option('-t, --type <type>', 'Filter by type (manual, automatic)')
-    .option('--page <number>', 'Page number', parseInt)
+    .option('--page <number>', 'Page number')
     .action(withErrorHandling(async (options: {
-      mailbox?: number;
+      mailbox?: string;
       type?: string;
-      page?: number;
+      page?: string;
     }) => {
       const result = await client.listWorkflows({
-        mailboxId: options.mailbox,
+        mailbox: options.mailbox ? parseIdArg(options.mailbox, 'mailbox') : undefined,
         type: options.type,
-        page: options.page,
+        page: options.page ? parseInt(options.page, 10) : undefined,
       });
       outputJson(result);
     }));

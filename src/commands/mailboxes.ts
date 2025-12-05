@@ -10,9 +10,9 @@ export function createMailboxesCommand(): Command {
   cmd
     .command('list')
     .description('List mailboxes')
-    .option('--page <number>', 'Page number', parseInt)
-    .action(withErrorHandling(async (options: { page?: number }) => {
-      const result = await client.listMailboxes(options.page);
+    .option('--page <number>', 'Page number')
+    .action(withErrorHandling(async (options: { page?: string }) => {
+      const result = await client.listMailboxes(options.page ? parseInt(options.page, 10) : undefined);
       outputJson(result);
     }));
 

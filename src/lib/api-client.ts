@@ -69,20 +69,27 @@ export class HelpScoutClient {
           this.accessToken = data.access_token;
           return data.access_token;
         }
-      } catch {
-        // Fall through to client credentials
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(JSON.stringify({ warning: 'Refresh token failed, using client credentials', reason: message }));
       }
     }
 
-    const response = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: appId,
-        client_secret: appSecret,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: appId,
+          client_secret: appSecret,
+        }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown network error';
+      throw new HelpScoutCliError(`Network request failed during authentication: ${message}`, 0);
+    }
 
     if (!response.ok) {
       const error = await response.json();
@@ -116,9 +123,10 @@ export class HelpScoutClient {
       params?: Record<string, string | number | boolean | undefined>;
       body?: unknown;
       retry?: boolean;
+      rateLimitRetry?: boolean;
     } = {},
   ): Promise<T> {
-    const { params, body, retry = true } = options;
+    const { params, body, retry = true, rateLimitRetry = true } = options;
 
     const url = new URL(`${API_BASE}${path}`);
     if (params) {
@@ -140,12 +148,27 @@ export class HelpScoutClient {
     if (body) {
       fetchOptions.body = JSON.stringify(body);
     }
-    const response = await fetch(url.toString(), fetchOptions);
+
+    let response: Response;
+    try {
+      response = await fetch(url.toString(), fetchOptions);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown network error';
+      throw new HelpScoutCliError(`Network request failed: ${message}`, 0);
+    }
 
     if (response.status === 401 && retry) {
       this.accessToken = null;
       await this.refreshAccessToken();
       return this.request(method, path, { ...options, retry: false });
+    }
+
+    if (response.status === 429 && rateLimitRetry) {
+      const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
+      const waitSeconds = Math.min(retryAfter, 120);
+      console.error(JSON.stringify({ warning: `Rate limited. Waiting ${waitSeconds}s before retry...` }));
+      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+      return this.request(method, path, { ...options, rateLimitRetry: false });
     }
 
     if (response.status === 204) {
@@ -321,14 +344,14 @@ export class HelpScoutClient {
 
   // Workflows
   async listWorkflows(params: {
-    mailboxId?: number;
+    mailbox?: number;
     type?: string;
     page?: number;
   } = {}) {
     const response = await this.request<PaginatedResponse<{ workflows: Workflow[] }>>(
       'GET',
       '/workflows',
-      { params },
+      { params: { mailboxId: params.mailbox, type: params.type, page: params.page } },
     );
     return {
       workflows: response._embedded?.workflows || [],
