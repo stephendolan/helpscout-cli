@@ -72,11 +72,20 @@ function selectFields(data: unknown, fields: string[]): unknown {
   }
 
   if (isObject(data)) {
-    const result: Record<string, unknown> = {};
-    for (const field of fields) {
-      if (field in data) {
-        result[field] = data[field];
+    const hasRequestedFields = fields.some(f => f in data);
+    if (hasRequestedFields) {
+      const result: Record<string, unknown> = {};
+      for (const field of fields) {
+        if (field in data) {
+          result[field] = data[field];
+        }
       }
+      return result;
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      result[key] = selectFields(value, fields);
     }
     return result;
   }
