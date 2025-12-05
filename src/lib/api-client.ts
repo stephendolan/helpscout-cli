@@ -207,6 +207,27 @@ export class HelpScoutClient {
     };
   }
 
+  async listAllConversations(params: {
+    mailbox?: string;
+    status?: string;
+    tag?: string;
+    assignedTo?: string;
+    modifiedSince?: string;
+  } = {}): Promise<Conversation[]> {
+    const allConversations: Conversation[] = [];
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+      const result = await this.listConversations({ ...params, page });
+      allConversations.push(...result.conversations);
+      totalPages = result.page.totalPages;
+      page++;
+    } while (page <= totalPages);
+
+    return allConversations;
+  }
+
   async getConversation(conversationId: number, embed?: string) {
     const params = embed ? { embed } : undefined;
     return this.request<Conversation>('GET', `/conversations/${conversationId}`, { params });

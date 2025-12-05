@@ -66,6 +66,27 @@ function stripMetadata(data: unknown): unknown {
   return data;
 }
 
+function stripTagStyles(data: unknown): unknown {
+  if (Array.isArray(data)) {
+    return data.map(stripTagStyles);
+  }
+
+  if (isObject(data)) {
+    const result: Record<string, unknown> = {};
+    const isTag = 'tag' in data && 'id' in data && typeof data.tag === 'string';
+
+    for (const [key, value] of Object.entries(data)) {
+      if (isTag && (key === 'color' || key === 'styles')) {
+        continue;
+      }
+      result[key] = stripTagStyles(value);
+    }
+    return result;
+  }
+
+  return data;
+}
+
 function selectFields(data: unknown, fields: string[]): unknown {
   if (Array.isArray(data)) {
     return data.map(item => selectFields(item, fields));
@@ -105,6 +126,8 @@ export function outputJson(data: unknown, options: OutputOptions = {}): void {
   if (mergedOptions.plain) {
     processed = convertBodiesToPlainText(processed);
   }
+
+  processed = stripTagStyles(processed);
 
   if (mergedOptions.fields) {
     const fieldList = mergedOptions.fields.split(',').map(f => f.trim());

@@ -2,6 +2,52 @@ import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
 import { outputJson } from '../lib/output.js';
 import { withErrorHandling, confirmDelete, parseIdArg } from '../lib/command-utils.js';
+import type { Conversation } from '../types/index.js';
+
+interface ConversationSummary {
+  total: number;
+  byStatus: Record<string, number>;
+  byTag: Record<string, number>;
+  conversations: Array<{
+    id: number;
+    subject: string;
+    status: string;
+    tags: string[];
+    preview: string;
+  }>;
+}
+
+function getTagName(tag: { tag?: string; name?: string }): string {
+  return tag.tag || tag.name || 'unknown';
+}
+
+function summarizeConversations(conversations: Conversation[]): ConversationSummary {
+  const byStatus: Record<string, number> = {};
+  const byTag: Record<string, number> = {};
+
+  for (const conv of conversations) {
+    byStatus[conv.status] = (byStatus[conv.status] || 0) + 1;
+
+    const tags = (conv.tags || []) as Array<{ tag?: string; name?: string }>;
+    for (const tag of tags) {
+      const tagName = getTagName(tag);
+      byTag[tagName] = (byTag[tagName] || 0) + 1;
+    }
+  }
+
+  return {
+    total: conversations.length,
+    byStatus,
+    byTag,
+    conversations: conversations.map(c => ({
+      id: c.id,
+      subject: c.subject,
+      status: c.status,
+      tags: ((c.tags || []) as Array<{ tag?: string; name?: string }>).map(getTagName),
+      preview: c.preview,
+    })),
+  };
+}
 
 export function createConversationsCommand(): Command {
   const cmd = new Command('conversations').description('Conversation operations');
@@ -18,6 +64,7 @@ export function createConversationsCommand(): Command {
     .option('--sort-order <order>', 'Sort order (asc, desc)')
     .option('--page <number>', 'Page number')
     .option('--embed <resources>', 'Embed resources (threads)')
+    .option('--summary', 'Output aggregated summary instead of full conversation list')
     .action(withErrorHandling(async (options: {
       mailbox?: string;
       status?: string;
@@ -28,7 +75,21 @@ export function createConversationsCommand(): Command {
       sortOrder?: string;
       page?: string;
       embed?: string;
+      summary?: boolean;
     }) => {
+      if (options.summary) {
+        const allConversations = await client.listAllConversations({
+          mailbox: options.mailbox,
+          status: options.status,
+          tag: options.tag,
+          assignedTo: options.assignedTo,
+          modifiedSince: options.modifiedSince,
+        });
+        const summary = summarizeConversations(allConversations);
+        outputJson(summary);
+        return;
+      }
+
       const result = await client.listConversations({
         mailbox: options.mailbox,
         status: options.status,
