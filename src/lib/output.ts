@@ -73,7 +73,7 @@ function stripTagStyles(data: unknown): unknown {
 
   if (isObject(data)) {
     const result: Record<string, unknown> = {};
-    const isTag = 'tag' in data && 'id' in data && typeof data.tag === 'string';
+    const isTag = 'id' in data && 'name' in data && 'slug' in data;
 
     for (const [key, value] of Object.entries(data)) {
       if (isTag && (key === 'color' || key === 'styles')) {

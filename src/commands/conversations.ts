@@ -17,10 +17,6 @@ interface ConversationSummary {
   }>;
 }
 
-function getTagName(tag: { tag?: string; name?: string }): string {
-  return tag.tag || tag.name || 'unknown';
-}
-
 function summarizeConversations(conversations: Conversation[]): ConversationSummary {
   const byStatus: Record<string, number> = {};
   const byTag: Record<string, number> = {};
@@ -28,10 +24,8 @@ function summarizeConversations(conversations: Conversation[]): ConversationSumm
   for (const conv of conversations) {
     byStatus[conv.status] = (byStatus[conv.status] || 0) + 1;
 
-    const tags = (conv.tags || []) as Array<{ tag?: string; name?: string }>;
-    for (const tag of tags) {
-      const tagName = getTagName(tag);
-      byTag[tagName] = (byTag[tagName] || 0) + 1;
+    for (const tag of conv.tags || []) {
+      byTag[tag.name] = (byTag[tag.name] || 0) + 1;
     }
   }
 
@@ -43,7 +37,7 @@ function summarizeConversations(conversations: Conversation[]): ConversationSumm
       id: c.id,
       subject: c.subject,
       status: c.status,
-      tags: ((c.tags || []) as Array<{ tag?: string; name?: string }>).map(getTagName),
+      tags: (c.tags || []).map(t => t.name),
       preview: c.preview,
     })),
   };
