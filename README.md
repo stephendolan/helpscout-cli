@@ -110,9 +110,12 @@ helpscout mailboxes view 123
 helpscout mailboxes set-default 123
 ```
 
-## Options
+## Global Options
 
 - `-c, --compact` - Output minified JSON (single line)
+- `-p, --plain` - Strip HTML from body fields, output plain text
+- `-f, --fields <fields>` - Comma-separated list of fields to include in output
+- `--include-metadata` - Include `_links` and `_embedded` in responses (stripped by default)
 - `--help` - Show help for any command
 
 ## Output
@@ -120,8 +123,34 @@ helpscout mailboxes set-default 123
 All commands output JSON for easy parsing:
 
 ```bash
+# Get all conversation subjects
 helpscout conversations list | jq '.conversations[].subject'
+
+# Get only id and subject fields
+helpscout conversations list --fields id,subject
+
+# Get plain text bodies (HTML stripped)
+helpscout conversations threads 456 --plain
 ```
+
+### Conversation Summary
+
+Use `--summary` to get an aggregated view instead of raw conversation data:
+
+```bash
+helpscout conversations list --summary
+```
+
+### Advanced Search
+
+Use `-q, --query` for Help Scout's advanced search syntax:
+
+```bash
+helpscout conversations list -q 'status:open tag:urgent'
+helpscout conversations list -q 'customer:john@example.com'
+```
+
+See [Help Scout Search Filters](https://docs.helpscout.com/article/47-search-filters-with-operators) for full query syntax.
 
 ## License
 
