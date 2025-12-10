@@ -195,6 +195,7 @@ export class HelpScoutClient {
     sortOrder?: string;
     page?: number;
     embed?: string;
+    query?: string;
   } = {}) {
     const response = await this.request<PaginatedResponse<{ conversations: Conversation[] }>>(
       'GET',
@@ -213,6 +214,7 @@ export class HelpScoutClient {
     tag?: string;
     assignedTo?: string;
     modifiedSince?: string;
+    query?: string;
   } = {}): Promise<Conversation[]> {
     const allConversations: Conversation[] = [];
     let page = 1;

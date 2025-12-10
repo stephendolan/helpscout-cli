@@ -64,6 +64,7 @@ export function createConversationsCommand(): Command {
     .option('--sort-order <order>', 'Sort order (asc, desc)')
     .option('--page <number>', 'Page number')
     .option('--embed <resources>', 'Embed resources (threads)')
+    .option('-q, --query <query>', 'Advanced search query (see https://docs.helpscout.com/article/47-search-filters-with-operators)')
     .option('--summary', 'Output aggregated summary instead of full conversation list')
     .action(withErrorHandling(async (options: {
       mailbox?: string;
@@ -75,6 +76,7 @@ export function createConversationsCommand(): Command {
       sortOrder?: string;
       page?: string;
       embed?: string;
+      query?: string;
       summary?: boolean;
     }) => {
       if (options.summary) {
@@ -84,6 +86,7 @@ export function createConversationsCommand(): Command {
           tag: options.tag,
           assignedTo: options.assignedTo,
           modifiedSince: options.modifiedSince,
+          query: options.query,
         });
         const summary = summarizeConversations(allConversations);
         outputJson(summary);
@@ -100,6 +103,7 @@ export function createConversationsCommand(): Command {
         sortOrder: options.sortOrder,
         page: options.page ? parseInt(options.page, 10) : undefined,
         embed: options.embed,
+        query: options.query,
       });
       outputJson(result);
     }));
