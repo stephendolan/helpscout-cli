@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@stephendolan/helpscout-cli.svg)](https://www.npmjs.com/package/@stephendolan/helpscout-cli)
 [![npm downloads](https://img.shields.io/npm/dm/@stephendolan/helpscout-cli.svg)](https://www.npmjs.com/package/@stephendolan/helpscout-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/node/v/@stephendolan/helpscout-cli.svg)](https://nodejs.org)
+[![Bun](https://img.shields.io/badge/Bun-%3E%3D1.0-black)](https://bun.sh)
 
 A command-line interface for Help Scout's Mailbox API 2.0, designed for LLMs and developers to quickly interface with Help Scout data.
 
@@ -18,12 +18,15 @@ A command-line interface for Help Scout's Mailbox API 2.0, designed for LLMs and
 
 ## Installation
 
+Requires [Bun](https://bun.sh) runtime.
+
 ```bash
-# Install globally
-npm install -g @stephendolan/helpscout-cli
+# Install globally with bun (recommended)
+bun install -g @stephendolan/helpscout-cli
 
 # Or run directly without installing
-npx @stephendolan/helpscout-cli conversations list
+bunx @stephendolan/helpscout-cli conversations list
+npx @stephendolan/helpscout-cli conversations list  # also works
 ```
 
 ### Linux Prerequisites
@@ -48,8 +51,8 @@ Without `libsecret`, use the environment variables instead.
 ```bash
 git clone https://github.com/stephendolan/helpscout-cli.git
 cd helpscout-cli
-npm install
-npm run link  # Build and link globally
+bun install
+bun run link  # Build and link globally
 ```
 
 ## Authentication

@@ -10,7 +10,7 @@ const APP_SECRET_ACCOUNT = 'app-secret';
 const KEYRING_UNAVAILABLE_ERROR =
   'Keychain storage unavailable. Cannot store credentials securely.\n' +
   'On Linux, install libsecret: sudo apt-get install libsecret-1-dev\n' +
-  'Then reinstall: npm install -g @stephendolan/helpscout-cli\n' +
+  'Then reinstall: bun install -g @stephendolan/helpscout-cli\n' +
   'Alternatively, use HELPSCOUT_APP_ID and HELPSCOUT_APP_SECRET environment variables.';
 
 const keyringCache = new Map<string, Entry | null>();
