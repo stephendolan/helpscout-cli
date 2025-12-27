@@ -12,47 +12,59 @@ export function createWorkflowsCommand(): Command {
     .option('-m, --mailbox <id>', 'Filter by mailbox ID')
     .option('-t, --type <type>', 'Filter by type (manual, automatic)')
     .option('--page <number>', 'Page number')
-    .action(withErrorHandling(async (options: {
-      mailbox?: string;
-      type?: string;
-      page?: string;
-    }) => {
-      const result = await client.listWorkflows({
-        mailbox: options.mailbox ? parseIdArg(options.mailbox, 'mailbox') : undefined,
-        type: options.type,
-        page: options.page ? parseInt(options.page, 10) : undefined,
-      });
-      outputJson(result);
-    }));
+    .action(
+      withErrorHandling(
+        async (options: {
+          mailbox?: string;
+          type?: string;
+          page?: string;
+        }) => {
+          const result = await client.listWorkflows({
+            mailbox: options.mailbox ? parseIdArg(options.mailbox, 'mailbox') : undefined,
+            type: options.type,
+            page: options.page ? parseInt(options.page, 10) : undefined,
+          });
+          outputJson(result);
+        }
+      )
+    );
 
   cmd
     .command('run')
     .description('Run a manual workflow on conversations')
     .argument('<workflow-id>', 'Workflow ID')
     .requiredOption('--conversations <ids>', 'Comma-separated conversation IDs')
-    .action(withErrorHandling(async (workflowId: string, options: { conversations: string }) => {
-      const conversationIds = options.conversations.split(',').map(id => parseIdArg(id.trim(), 'conversation'));
-      await client.runWorkflow(parseIdArg(workflowId, 'workflow'), conversationIds);
-      outputJson({ message: 'Workflow executed' });
-    }));
+    .action(
+      withErrorHandling(async (workflowId: string, options: { conversations: string }) => {
+        const conversationIds = options.conversations
+          .split(',')
+          .map((id) => parseIdArg(id.trim(), 'conversation'));
+        await client.runWorkflow(parseIdArg(workflowId, 'workflow'), conversationIds);
+        outputJson({ message: 'Workflow executed' });
+      })
+    );
 
   cmd
     .command('activate')
     .description('Activate a workflow')
     .argument('<id>', 'Workflow ID')
-    .action(withErrorHandling(async (id: string) => {
-      await client.updateWorkflowStatus(parseIdArg(id, 'workflow'), 'active');
-      outputJson({ message: 'Workflow activated' });
-    }));
+    .action(
+      withErrorHandling(async (id: string) => {
+        await client.updateWorkflowStatus(parseIdArg(id, 'workflow'), 'active');
+        outputJson({ message: 'Workflow activated' });
+      })
+    );
 
   cmd
     .command('deactivate')
     .description('Deactivate a workflow')
     .argument('<id>', 'Workflow ID')
-    .action(withErrorHandling(async (id: string) => {
-      await client.updateWorkflowStatus(parseIdArg(id, 'workflow'), 'inactive');
-      outputJson({ message: 'Workflow deactivated' });
-    }));
+    .action(
+      withErrorHandling(async (id: string) => {
+        await client.updateWorkflowStatus(parseIdArg(id, 'workflow'), 'inactive');
+        outputJson({ message: 'Workflow deactivated' });
+      })
+    );
 
   return cmd;
 }

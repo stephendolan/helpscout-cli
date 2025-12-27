@@ -10,19 +10,23 @@ export function createTagsCommand(): Command {
     .command('list')
     .description('List all tags')
     .option('--page <number>', 'Page number')
-    .action(withErrorHandling(async (options: { page?: string }) => {
-      const result = await client.listTags(options.page ? parseInt(options.page, 10) : undefined);
-      outputJson(result);
-    }));
+    .action(
+      withErrorHandling(async (options: { page?: string }) => {
+        const result = await client.listTags(options.page ? parseInt(options.page, 10) : undefined);
+        outputJson(result);
+      })
+    );
 
   cmd
     .command('view')
     .description('View a tag')
     .argument('<id>', 'Tag ID')
-    .action(withErrorHandling(async (id: string) => {
-      const tag = await client.getTag(parseIdArg(id, 'tag'));
-      outputJson(tag);
-    }));
+    .action(
+      withErrorHandling(async (id: string) => {
+        const tag = await client.getTag(parseIdArg(id, 'tag'));
+        outputJson(tag);
+      })
+    );
 
   return cmd;
 }

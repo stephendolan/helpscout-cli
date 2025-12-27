@@ -4,7 +4,7 @@ import { outputJson } from './output.js';
 export class HelpScoutCliError extends Error {
   constructor(
     message: string,
-    public statusCode?: number,
+    public statusCode?: number
   ) {
     super(message);
     this.name = 'HelpScoutCliError';
@@ -15,7 +15,7 @@ export class HelpScoutApiError extends Error {
   constructor(
     message: string,
     public apiError: unknown,
-    public statusCode: number,
+    public statusCode: number
   ) {
     super(message);
     this.name = 'HelpScoutApiError';
@@ -83,7 +83,7 @@ export function sanitizeApiError(error: unknown): HelpScoutError {
     detail = apiError.message;
   } else if (apiError._embedded?.errors?.length) {
     detail = apiError._embedded.errors
-      .map(e => e.message || e.path)
+      .map((e) => e.message || e.path)
       .filter(Boolean)
       .join('; ');
   }
@@ -95,9 +95,10 @@ export function sanitizeApiError(error: unknown): HelpScoutError {
 }
 
 function formatErrorResponse(name: string, detail: string, statusCode: number): never {
-  const hint = name === 'too_many_requests'
-    ? 'Help Scout API limit: 200 requests/minute. Wait a moment and retry.'
-    : undefined;
+  const hint =
+    name === 'too_many_requests'
+      ? 'Help Scout API limit: 200 requests/minute. Wait a moment and retry.'
+      : undefined;
 
   const response: { error: { name: string; detail: string; statusCode: number }; hint?: string } = {
     error: { name, detail, statusCode },
@@ -122,7 +123,7 @@ export function handleHelpScoutError(error: unknown): never {
     formatErrorResponse(
       hsError.name,
       hsError.detail,
-      error.statusCode || ERROR_STATUS_CODES[hsError.name] || 500,
+      error.statusCode || ERROR_STATUS_CODES[hsError.name] || 500
     );
   }
 

@@ -2,7 +2,7 @@ import { handleHelpScoutError, HelpScoutCliError } from './errors.js';
 import { outputJson } from './output.js';
 
 export function withErrorHandling<T extends unknown[], R>(
-  fn: (...args: T) => Promise<R>,
+  fn: (...args: T) => Promise<R>
 ): (...args: T) => Promise<void> {
   return async (...args: T) => {
     try {
@@ -21,10 +21,7 @@ export function parseIdArg(value: string, resourceType: string = 'resource'): nu
   return parsed;
 }
 
-export function requireAtLeastOneField(
-  data: Record<string, unknown>,
-  operation: string,
-): void {
+export function requireAtLeastOneField(data: Record<string, unknown>, operation: string): void {
   const hasFields = Object.values(data).some((v) => v !== undefined);
   if (!hasFields) {
     throw new HelpScoutCliError(`${operation} requires at least one field to update`, 400);
@@ -33,7 +30,7 @@ export function requireAtLeastOneField(
 
 export async function confirmDelete(
   resourceType: string,
-  skipConfirmation?: boolean,
+  skipConfirmation?: boolean
 ): Promise<boolean> {
   if (skipConfirmation) {
     return true;

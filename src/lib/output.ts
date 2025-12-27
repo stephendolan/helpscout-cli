@@ -89,11 +89,11 @@ function stripTagStyles(data: unknown): unknown {
 
 function selectFields(data: unknown, fields: string[]): unknown {
   if (Array.isArray(data)) {
-    return data.map(item => selectFields(item, fields));
+    return data.map((item) => selectFields(item, fields));
   }
 
   if (isObject(data)) {
-    const hasRequestedFields = fields.some(f => f in data);
+    const hasRequestedFields = fields.some((f) => f in data);
     if (hasRequestedFields) {
       const result: Record<string, unknown> = {};
       for (const field of fields) {
@@ -130,7 +130,7 @@ export function outputJson(data: unknown, options: OutputOptions = {}): void {
   processed = stripTagStyles(processed);
 
   if (mergedOptions.fields) {
-    const fieldList = mergedOptions.fields.split(',').map(f => f.trim());
+    const fieldList = mergedOptions.fields.split(',').map((f) => f.trim());
     processed = selectFields(processed, fieldList);
   }
 

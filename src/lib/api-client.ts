@@ -41,10 +41,7 @@ export class HelpScoutClient {
     const refreshToken = await auth.getRefreshToken();
 
     if (!appId || !appSecret) {
-      throw new HelpScoutCliError(
-        'Not configured. Please run: helpscout auth login',
-        401,
-      );
+      throw new HelpScoutCliError('Not configured. Please run: helpscout auth login', 401);
     }
 
     if (refreshToken) {
@@ -71,7 +68,12 @@ export class HelpScoutClient {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error(JSON.stringify({ warning: 'Refresh token failed, using client credentials', reason: message }));
+        console.error(
+          JSON.stringify({
+            warning: 'Refresh token failed, using client credentials',
+            reason: message,
+          })
+        );
       }
     }
 
@@ -124,7 +126,7 @@ export class HelpScoutClient {
       body?: unknown;
       retry?: boolean;
       rateLimitRetry?: boolean;
-    } = {},
+    } = {}
   ): Promise<T> {
     const { params, body, retry = true, rateLimitRetry = true } = options;
 
@@ -166,7 +168,9 @@ export class HelpScoutClient {
     if (response.status === 429 && rateLimitRetry) {
       const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
       const waitSeconds = Math.min(retryAfter, 120);
-      console.error(JSON.stringify({ warning: `Rate limited. Waiting ${waitSeconds}s before retry...` }));
+      console.error(
+        JSON.stringify({ warning: `Rate limited. Waiting ${waitSeconds}s before retry...` })
+      );
       await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
       return this.request(method, path, { ...options, rateLimitRetry: false });
     }
@@ -183,24 +187,25 @@ export class HelpScoutClient {
     return response.json() as Promise<T>;
   }
 
-
   // Conversations
-  async listConversations(params: {
-    mailbox?: string;
-    status?: string;
-    tag?: string;
-    assignedTo?: string;
-    modifiedSince?: string;
-    sortField?: string;
-    sortOrder?: string;
-    page?: number;
-    embed?: string;
-    query?: string;
-  } = {}) {
+  async listConversations(
+    params: {
+      mailbox?: string;
+      status?: string;
+      tag?: string;
+      assignedTo?: string;
+      modifiedSince?: string;
+      sortField?: string;
+      sortOrder?: string;
+      page?: number;
+      embed?: string;
+      query?: string;
+    } = {}
+  ) {
     const response = await this.request<PaginatedResponse<{ conversations: Conversation[] }>>(
       'GET',
       '/conversations',
-      { params },
+      { params }
     );
     return {
       conversations: response._embedded?.conversations || [],
@@ -208,14 +213,16 @@ export class HelpScoutClient {
     };
   }
 
-  async listAllConversations(params: {
-    mailbox?: string;
-    status?: string;
-    tag?: string;
-    assignedTo?: string;
-    modifiedSince?: string;
-    query?: string;
-  } = {}): Promise<Conversation[]> {
+  async listAllConversations(
+    params: {
+      mailbox?: string;
+      status?: string;
+      tag?: string;
+      assignedTo?: string;
+      modifiedSince?: string;
+      query?: string;
+    } = {}
+  ): Promise<Conversation[]> {
     const allConversations: Conversation[] = [];
     let page = 1;
     let totalPages = 1;
@@ -238,7 +245,7 @@ export class HelpScoutClient {
   async getConversationThreads(conversationId: number) {
     const response = await this.request<PaginatedResponse<{ threads: Thread[] }>>(
       'GET',
-      `/conversations/${conversationId}/threads`,
+      `/conversations/${conversationId}/threads`
     );
     return response._embedded?.threads || [];
   }
@@ -249,7 +256,7 @@ export class HelpScoutClient {
       op: string;
       path: string;
       value: unknown;
-    }>,
+    }>
   ) {
     await this.request<void>('PATCH', `/conversations/${conversationId}`, { body: data });
   }
@@ -266,8 +273,8 @@ export class HelpScoutClient {
 
   async removeConversationTag(conversationId: number, tag: string) {
     const conversation = await this.getConversation(conversationId);
-    const existingTags = conversation?.tags?.map(t => t.name) || [];
-    const newTags = existingTags.filter(t => t !== tag);
+    const existingTags = conversation?.tags?.map((t) => t.name) || [];
+    const newTags = existingTags.filter((t) => t !== tag);
     await this.request<void>('PUT', `/conversations/${conversationId}/tags`, {
       body: { tags: newTags },
     });
@@ -280,7 +287,7 @@ export class HelpScoutClient {
       user?: number;
       draft?: boolean;
       status?: string;
-    },
+    }
   ) {
     await this.request<void>('POST', `/conversations/${conversationId}/reply`, { body: data });
   }
@@ -290,26 +297,28 @@ export class HelpScoutClient {
     data: {
       text: string;
       user?: number;
-    },
+    }
   ) {
     await this.request<void>('POST', `/conversations/${conversationId}/notes`, { body: data });
   }
 
   // Customers
-  async listCustomers(params: {
-    mailbox?: string;
-    firstName?: string;
-    lastName?: string;
-    modifiedSince?: string;
-    sortField?: string;
-    sortOrder?: string;
-    page?: number;
-    query?: string;
-  } = {}) {
+  async listCustomers(
+    params: {
+      mailbox?: string;
+      firstName?: string;
+      lastName?: string;
+      modifiedSince?: string;
+      sortField?: string;
+      sortOrder?: string;
+      page?: number;
+      query?: string;
+    } = {}
+  ) {
     const response = await this.request<PaginatedResponse<{ customers: Customer[] }>>(
       'GET',
       '/customers',
-      { params },
+      { params }
     );
     return {
       customers: response._embedded?.customers || [],
@@ -339,7 +348,7 @@ export class HelpScoutClient {
       location: string;
       organization: string;
       background: string;
-    }>,
+    }>
   ) {
     await this.request<void>('PUT', `/customers/${customerId}`, { body: data });
   }
@@ -350,11 +359,9 @@ export class HelpScoutClient {
 
   // Tags
   async listTags(page?: number) {
-    const response = await this.request<PaginatedResponse<{ tags: Tag[] }>>(
-      'GET',
-      '/tags',
-      { params: page ? { page } : undefined },
-    );
+    const response = await this.request<PaginatedResponse<{ tags: Tag[] }>>('GET', '/tags', {
+      params: page ? { page } : undefined,
+    });
     return {
       tags: response._embedded?.tags || [],
       page: response.page,
@@ -366,15 +373,17 @@ export class HelpScoutClient {
   }
 
   // Workflows
-  async listWorkflows(params: {
-    mailbox?: number;
-    type?: string;
-    page?: number;
-  } = {}) {
+  async listWorkflows(
+    params: {
+      mailbox?: number;
+      type?: string;
+      page?: number;
+    } = {}
+  ) {
     const response = await this.request<PaginatedResponse<{ workflows: Workflow[] }>>(
       'GET',
       '/workflows',
-      { params: { mailboxId: params.mailbox, type: params.type, page: params.page } },
+      { params: { mailboxId: params.mailbox, type: params.type, page: params.page } }
     );
     return {
       workflows: response._embedded?.workflows || [],
@@ -399,7 +408,7 @@ export class HelpScoutClient {
     const response = await this.request<PaginatedResponse<{ mailboxes: Mailbox[] }>>(
       'GET',
       '/mailboxes',
-      { params: page ? { page } : undefined },
+      { params: page ? { page } : undefined }
     );
     return {
       mailboxes: response._embedded?.mailboxes || [],
