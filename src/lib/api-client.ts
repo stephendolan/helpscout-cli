@@ -194,7 +194,6 @@ export class HelpScoutClient {
       status?: string;
       tag?: string;
       assignedTo?: string;
-      modifiedSince?: string;
       sortField?: string;
       sortOrder?: string;
       page?: number;
@@ -219,7 +218,6 @@ export class HelpScoutClient {
       status?: string;
       tag?: string;
       assignedTo?: string;
-      modifiedSince?: string;
       query?: string;
     } = {}
   ): Promise<Conversation[]> {
@@ -308,7 +306,6 @@ export class HelpScoutClient {
       mailbox?: string;
       firstName?: string;
       lastName?: string;
-      modifiedSince?: string;
       sortField?: string;
       sortOrder?: string;
       page?: number;

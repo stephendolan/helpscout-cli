@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
 import { outputJson } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
-import { parseDateTime } from '../lib/dates.js';
+import { buildDateQuery } from '../lib/dates.js';
 import type { Conversation } from '../types/index.js';
 
 interface ConversationSummary {
@@ -54,7 +54,10 @@ export function createConversationsCommand(): Command {
     .option('-s, --status <status>', 'Filter by status (active, all, closed, open, pending, spam)')
     .option('-t, --tag <tags>', 'Filter by tag(s), comma-separated')
     .option('--assigned-to <id>', 'Filter by assignee user ID')
-    .option('--modified-since <date>', 'Filter by modified date')
+    .option('--created-since <date>', 'Show conversations created after this date')
+    .option('--created-before <date>', 'Show conversations created before this date')
+    .option('--modified-since <date>', 'Show conversations modified after this date')
+    .option('--modified-before <date>', 'Show conversations modified before this date')
     .option(
       '--sort-field <field>',
       'Sort by field (createdAt, modifiedAt, number, status, subject)'
@@ -74,7 +77,10 @@ export function createConversationsCommand(): Command {
           status?: string;
           tag?: string;
           assignedTo?: string;
+          createdSince?: string;
+          createdBefore?: string;
           modifiedSince?: string;
+          modifiedBefore?: string;
           sortField?: string;
           sortOrder?: string;
           page?: string;
@@ -82,9 +88,15 @@ export function createConversationsCommand(): Command {
           query?: string;
           summary?: boolean;
         }) => {
-          const modifiedSince = options.modifiedSince
-            ? parseDateTime(options.modifiedSince)
-            : undefined;
+          const query = buildDateQuery(
+            {
+              createdSince: options.createdSince,
+              createdBefore: options.createdBefore,
+              modifiedSince: options.modifiedSince,
+              modifiedBefore: options.modifiedBefore,
+            },
+            options.query
+          );
 
           if (options.summary) {
             const allConversations = await client.listAllConversations({
@@ -92,8 +104,7 @@ export function createConversationsCommand(): Command {
               status: options.status,
               tag: options.tag,
               assignedTo: options.assignedTo,
-              modifiedSince,
-              query: options.query,
+              query,
             });
             const summary = summarizeConversations(allConversations);
             outputJson(summary);
@@ -105,12 +116,11 @@ export function createConversationsCommand(): Command {
             status: options.status,
             tag: options.tag,
             assignedTo: options.assignedTo,
-            modifiedSince,
             sortField: options.sortField,
             sortOrder: options.sortOrder,
             page: options.page ? parseInt(options.page, 10) : undefined,
             embed: options.embed,
-            query: options.query,
+            query,
           });
           outputJson(result);
         }

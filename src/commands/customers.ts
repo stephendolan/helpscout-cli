@@ -7,7 +7,7 @@ import {
   parseIdArg,
   requireAtLeastOneField,
 } from '../lib/command-utils.js';
-import { parseDateTime } from '../lib/dates.js';
+import { buildDateQuery } from '../lib/dates.js';
 
 export function createCustomersCommand(): Command {
   const cmd = new Command('customers').description('Customer operations');
@@ -18,7 +18,10 @@ export function createCustomersCommand(): Command {
     .option('-m, --mailbox <id>', 'Filter by mailbox ID')
     .option('--first-name <name>', 'Filter by first name')
     .option('--last-name <name>', 'Filter by last name')
-    .option('--modified-since <date>', 'Filter by modified date')
+    .option('--created-since <date>', 'Show customers created after this date')
+    .option('--created-before <date>', 'Show customers created before this date')
+    .option('--modified-since <date>', 'Show customers modified after this date')
+    .option('--modified-before <date>', 'Show customers modified before this date')
     .option('--sort-field <field>', 'Sort by field (createdAt, firstName, lastName, modifiedAt)')
     .option('--sort-order <order>', 'Sort order (asc, desc)')
     .option('--page <number>', 'Page number')
@@ -29,23 +32,33 @@ export function createCustomersCommand(): Command {
           mailbox?: string;
           firstName?: string;
           lastName?: string;
+          createdSince?: string;
+          createdBefore?: string;
           modifiedSince?: string;
+          modifiedBefore?: string;
           sortField?: string;
           sortOrder?: string;
           page?: string;
           query?: string;
         }) => {
+          const query = buildDateQuery(
+            {
+              createdSince: options.createdSince,
+              createdBefore: options.createdBefore,
+              modifiedSince: options.modifiedSince,
+              modifiedBefore: options.modifiedBefore,
+            },
+            options.query
+          );
+
           const result = await client.listCustomers({
             mailbox: options.mailbox,
             firstName: options.firstName,
             lastName: options.lastName,
-            modifiedSince: options.modifiedSince
-              ? parseDateTime(options.modifiedSince)
-              : undefined,
             sortField: options.sortField,
             sortOrder: options.sortOrder,
             page: options.page ? parseInt(options.page, 10) : undefined,
-            query: options.query,
+            query,
           });
           outputJson(result);
         }
