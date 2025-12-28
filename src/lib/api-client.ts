@@ -219,6 +219,7 @@ export class HelpScoutClient {
       tag?: string;
       assignedTo?: string;
       query?: string;
+      embed?: string;
     } = {}
   ): Promise<Conversation[]> {
     const allConversations: Conversation[] = [];

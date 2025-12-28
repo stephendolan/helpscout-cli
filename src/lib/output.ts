@@ -11,7 +11,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function htmlToPlainText(html: string): string {
+export function htmlToPlainText(html: string): string {
   const text = convert(html, {
     wordwrap: false,
     preserveNewlines: false,

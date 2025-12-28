@@ -66,6 +66,9 @@ export interface Conversation {
     email?: string;
   };
   customFields?: CustomField[];
+  _embedded?: {
+    threads?: Thread[];
+  };
 }
 
 export interface Thread {

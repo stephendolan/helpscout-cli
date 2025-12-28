@@ -16,38 +16,21 @@ interface DateFilters {
   modifiedBefore?: string;
 }
 
+function rangeClause(field: string, since?: string, before?: string): string[] {
+  const clauses: string[] = [];
+  if (since) clauses.push(`${field}:[${parseDateTime(since)} TO *]`);
+  if (before) clauses.push(`${field}:[* TO ${parseDateTime(before)}]`);
+  return clauses;
+}
+
 export function buildDateQuery(filters: DateFilters, existingQuery?: string): string | undefined {
-  const parts: string[] = [];
+  const parts = [
+    ...rangeClause('createdAt', filters.createdSince, filters.createdBefore),
+    ...rangeClause('modifiedAt', filters.modifiedSince, filters.modifiedBefore),
+  ];
 
-  if (filters.createdSince) {
-    const date = parseDateTime(filters.createdSince);
-    parts.push(`createdAt:[${date} TO *]`);
-  }
-
-  if (filters.createdBefore) {
-    const date = parseDateTime(filters.createdBefore);
-    parts.push(`createdAt:[* TO ${date}]`);
-  }
-
-  if (filters.modifiedSince) {
-    const date = parseDateTime(filters.modifiedSince);
-    parts.push(`modifiedAt:[${date} TO *]`);
-  }
-
-  if (filters.modifiedBefore) {
-    const date = parseDateTime(filters.modifiedBefore);
-    parts.push(`modifiedAt:[* TO ${date}]`);
-  }
-
-  if (parts.length === 0) {
-    return existingQuery;
-  }
+  if (parts.length === 0) return existingQuery;
 
   const dateQuery = parts.join(' AND ');
-
-  if (existingQuery) {
-    return `(${existingQuery}) AND ${dateQuery}`;
-  }
-
-  return dateQuery;
+  return existingQuery ? `(${existingQuery}) AND ${dateQuery}` : dateQuery;
 }

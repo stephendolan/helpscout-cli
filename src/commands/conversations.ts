@@ -1,9 +1,16 @@
 import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
-import { outputJson } from '../lib/output.js';
+import { outputJson, htmlToPlainText } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
 import { buildDateQuery } from '../lib/dates.js';
-import type { Conversation } from '../types/index.js';
+import type { Conversation, Thread } from '../types/index.js';
+
+interface ParticipantInfo {
+  name?: string;
+  email?: string;
+  messageCount: number;
+  firstMessage?: string;
+}
 
 interface ConversationSummary {
   total: number;
@@ -14,8 +21,66 @@ interface ConversationSummary {
     subject: string;
     status: string;
     tags: string[];
-    preview: string;
+    customer: ParticipantInfo;
+    user: ParticipantInfo;
   }>;
+}
+
+const MAX_MESSAGE_LENGTH = 300;
+
+function truncate(text: string): string {
+  if (text.length <= MAX_MESSAGE_LENGTH) return text;
+  return text.slice(0, MAX_MESSAGE_LENGTH).trim() + '...';
+}
+
+function buildName(info: { first?: string; last?: string } | undefined): string | undefined {
+  if (!info) return undefined;
+  return [info.first, info.last].filter(Boolean).join(' ') || undefined;
+}
+
+function extractThreadInfo(threads: Thread[] | undefined): {
+  customer: ParticipantInfo;
+  user: ParticipantInfo;
+} {
+  if (!threads?.length) {
+    return {
+      customer: { messageCount: 0 },
+      user: { messageCount: 0 },
+    };
+  }
+
+  const sortedThreads = [...threads].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  const customerThreads = sortedThreads.filter((t) => t.type === 'customer');
+  const userThreads = sortedThreads.filter((t) => t.type === 'message');
+
+  const firstCustomerWithBody = customerThreads.find((t) => t.body);
+  const firstUserWithBody = userThreads.find((t) => t.body);
+  const mostRecentUserThread = userThreads[userThreads.length - 1];
+
+  const customerSource = firstCustomerWithBody?.customer || firstCustomerWithBody?.createdBy;
+  const userSource = mostRecentUserThread?.createdBy;
+
+  return {
+    customer: {
+      name: buildName(customerSource),
+      email: customerSource?.email,
+      messageCount: customerThreads.length,
+      firstMessage: firstCustomerWithBody?.body
+        ? truncate(htmlToPlainText(firstCustomerWithBody.body))
+        : undefined,
+    },
+    user: {
+      name: buildName(userSource),
+      email: userSource?.email,
+      messageCount: userThreads.length,
+      firstMessage: firstUserWithBody?.body
+        ? truncate(htmlToPlainText(firstUserWithBody.body))
+        : undefined,
+    },
+  };
 }
 
 function summarizeConversations(conversations: Conversation[]): ConversationSummary {
@@ -34,13 +99,16 @@ function summarizeConversations(conversations: Conversation[]): ConversationSumm
     total: conversations.length,
     byStatus,
     byTag,
-    conversations: conversations.map((c) => ({
-      id: c.id,
-      subject: c.subject,
-      status: c.status,
-      tags: (c.tags || []).map((t) => t.name),
-      preview: c.preview,
-    })),
+    conversations: conversations.map((c) => {
+      const threadInfo = extractThreadInfo(c._embedded?.threads);
+      return {
+        id: c.id,
+        subject: c.subject,
+        status: c.status,
+        tags: (c.tags || []).map((t) => t.name),
+        ...threadInfo,
+      };
+    }),
   };
 }
 
@@ -105,6 +173,7 @@ export function createConversationsCommand(): Command {
               tag: options.tag,
               assignedTo: options.assignedTo,
               query,
+              embed: 'threads',
             });
             const summary = summarizeConversations(allConversations);
             outputJson(summary);
