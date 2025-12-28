@@ -1,7 +1,8 @@
 import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
 import { outputJson } from '../lib/output.js';
-import { withErrorHandling, confirmDelete, parseIdArg } from '../lib/command-utils.js';
+import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
+import { parseDateTime } from '../lib/dates.js';
 import type { Conversation } from '../types/index.js';
 
 interface ConversationSummary {
@@ -53,7 +54,7 @@ export function createConversationsCommand(): Command {
     .option('-s, --status <status>', 'Filter by status (active, all, closed, open, pending, spam)')
     .option('-t, --tag <tags>', 'Filter by tag(s), comma-separated')
     .option('--assigned-to <id>', 'Filter by assignee user ID')
-    .option('--modified-since <date>', 'Filter by modified date (ISO 8601)')
+    .option('--modified-since <date>', 'Filter by modified date')
     .option(
       '--sort-field <field>',
       'Sort by field (createdAt, modifiedAt, number, status, subject)'
@@ -81,13 +82,17 @@ export function createConversationsCommand(): Command {
           query?: string;
           summary?: boolean;
         }) => {
+          const modifiedSince = options.modifiedSince
+            ? parseDateTime(options.modifiedSince)
+            : undefined;
+
           if (options.summary) {
             const allConversations = await client.listAllConversations({
               mailbox: options.mailbox,
               status: options.status,
               tag: options.tag,
               assignedTo: options.assignedTo,
-              modifiedSince: options.modifiedSince,
+              modifiedSince,
               query: options.query,
             });
             const summary = summarizeConversations(allConversations);
@@ -100,7 +105,7 @@ export function createConversationsCommand(): Command {
             status: options.status,
             tag: options.tag,
             assignedTo: options.assignedTo,
-            modifiedSince: options.modifiedSince,
+            modifiedSince,
             sortField: options.sortField,
             sortOrder: options.sortOrder,
             page: options.page ? parseInt(options.page, 10) : undefined,
@@ -164,7 +169,7 @@ export function createConversationsCommand(): Command {
     .option('-y, --yes', 'Skip confirmation')
     .action(
       withErrorHandling(async (id: string, options: { yes?: boolean }) => {
-        await confirmDelete('conversation', options.yes);
+        requireConfirmation('conversation', options.yes);
         await client.deleteConversation(parseIdArg(id, 'conversation'));
         outputJson({ message: 'Conversation deleted' });
       })

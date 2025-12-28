@@ -3,10 +3,11 @@ import { client } from '../lib/api-client.js';
 import { outputJson } from '../lib/output.js';
 import {
   withErrorHandling,
-  confirmDelete,
+  requireConfirmation,
   parseIdArg,
   requireAtLeastOneField,
 } from '../lib/command-utils.js';
+import { parseDateTime } from '../lib/dates.js';
 
 export function createCustomersCommand(): Command {
   const cmd = new Command('customers').description('Customer operations');
@@ -17,7 +18,7 @@ export function createCustomersCommand(): Command {
     .option('-m, --mailbox <id>', 'Filter by mailbox ID')
     .option('--first-name <name>', 'Filter by first name')
     .option('--last-name <name>', 'Filter by last name')
-    .option('--modified-since <date>', 'Filter by modified date (ISO 8601)')
+    .option('--modified-since <date>', 'Filter by modified date')
     .option('--sort-field <field>', 'Sort by field (createdAt, firstName, lastName, modifiedAt)')
     .option('--sort-order <order>', 'Sort order (asc, desc)')
     .option('--page <number>', 'Page number')
@@ -38,7 +39,9 @@ export function createCustomersCommand(): Command {
             mailbox: options.mailbox,
             firstName: options.firstName,
             lastName: options.lastName,
-            modifiedSince: options.modifiedSince,
+            modifiedSince: options.modifiedSince
+              ? parseDateTime(options.modifiedSince)
+              : undefined,
             sortField: options.sortField,
             sortOrder: options.sortOrder,
             page: options.page ? parseInt(options.page, 10) : undefined,
@@ -133,7 +136,7 @@ export function createCustomersCommand(): Command {
     .option('-y, --yes', 'Skip confirmation')
     .action(
       withErrorHandling(async (id: string, options: { yes?: boolean }) => {
-        await confirmDelete('customer', options.yes);
+        requireConfirmation('customer', options.yes);
         await client.deleteCustomer(parseIdArg(id, 'customer'));
         outputJson({ message: 'Customer deleted' });
       })

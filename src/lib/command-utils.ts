@@ -1,5 +1,4 @@
 import { handleHelpScoutError, HelpScoutCliError } from './errors.js';
-import { outputJson } from './output.js';
 
 export function withErrorHandling<T extends unknown[], R>(
   fn: (...args: T) => Promise<R>
@@ -28,28 +27,11 @@ export function requireAtLeastOneField(data: Record<string, unknown>, operation:
   }
 }
 
-export async function confirmDelete(
-  resourceType: string,
-  skipConfirmation?: boolean
-): Promise<boolean> {
-  if (skipConfirmation) {
-    return true;
+export function requireConfirmation(itemType: string, confirmed: boolean = false): void {
+  if (!confirmed) {
+    throw new HelpScoutCliError(
+      `Deleting ${itemType} requires --yes flag to confirm`,
+      400
+    );
   }
-
-  const readline = await import('readline');
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stderr,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(`Delete ${resourceType}? (y/N) `, (answer) => {
-      rl.close();
-      if (answer.toLowerCase() !== 'y') {
-        outputJson({ cancelled: true, message: 'Deletion cancelled' });
-        process.exit(0);
-      }
-      resolve(true);
-    });
-  });
 }
