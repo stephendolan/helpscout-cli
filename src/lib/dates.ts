@@ -6,5 +6,5 @@ export function parseDateTime(input: string): string {
   if (!d.isValid()) {
     throw new HelpScoutCliError(`Invalid date: ${input}`, 400);
   }
-  return d.toISOString();
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
