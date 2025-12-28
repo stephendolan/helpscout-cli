@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
-import { outputJson, htmlToPlainText } from '../lib/output.js';
+import { outputJson, htmlToPlainText, buildName } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
 import { buildDateQuery } from '../lib/dates.js';
 import type { Conversation, Thread } from '../types/index.js';
@@ -33,9 +33,9 @@ function truncate(text: string): string {
   return text.slice(0, MAX_MESSAGE_LENGTH).trim() + '...';
 }
 
-function buildName(info: { first?: string; last?: string } | undefined): string | undefined {
+function buildPersonName(info: { first?: string; last?: string } | undefined): string | undefined {
   if (!info) return undefined;
-  return [info.first, info.last].filter(Boolean).join(' ') || undefined;
+  return buildName(info.first, info.last);
 }
 
 function extractThreadInfo(threads: Thread[] | undefined): {
@@ -65,7 +65,7 @@ function extractThreadInfo(threads: Thread[] | undefined): {
 
   return {
     customer: {
-      name: buildName(customerSource),
+      name: buildPersonName(customerSource),
       email: customerSource?.email,
       messageCount: customerThreads.length,
       firstMessage: firstCustomerWithBody?.body
@@ -73,7 +73,7 @@ function extractThreadInfo(threads: Thread[] | undefined): {
         : undefined,
     },
     user: {
-      name: buildName(userSource),
+      name: buildPersonName(userSource),
       email: userSource?.email,
       messageCount: userThreads.length,
       firstMessage: firstUserWithBody?.body
@@ -200,14 +200,16 @@ export function createConversationsCommand(): Command {
     .command('view')
     .description('View a conversation')
     .argument('<id>', 'Conversation ID')
-    .option('--embed <resources>', 'Embed resources (threads)')
     .action(
-      withErrorHandling(async (id: string, options: { embed?: string }) => {
-        const conversation = await client.getConversation(
-          parseIdArg(id, 'conversation'),
-          options.embed
-        );
-        outputJson(conversation);
+      withErrorHandling(async (id: string) => {
+        const conversation = await client.getConversation(parseIdArg(id, 'conversation'), 'threads');
+        const threadInfo = extractThreadInfo(conversation._embedded?.threads);
+        const result = {
+          ...conversation,
+          customer: threadInfo.customer,
+          user: threadInfo.user,
+        };
+        outputJson(result, { plain: true });
       })
     );
 
@@ -221,9 +223,13 @@ export function createConversationsCommand(): Command {
       '-t, --type <types>',
       'Filter by specific thread type(s), comma-separated (customer, message, note, lineitem, chat, phone, forwardchild, forwardparent, beaconchat)'
     )
+    .option('--html', 'Output thread bodies as HTML (default is plain text)')
     .action(
       withErrorHandling(
-        async (id: string, options: { includeNotes?: boolean; all?: boolean; type?: string }) => {
+        async (
+          id: string,
+          options: { includeNotes?: boolean; all?: boolean; type?: string; html?: boolean }
+        ) => {
           let threads = await client.getConversationThreads(parseIdArg(id, 'conversation'));
 
           if (options.type) {
@@ -236,7 +242,7 @@ export function createConversationsCommand(): Command {
             threads = threads.filter((t) => allowedTypes.includes(t.type));
           }
 
-          outputJson(threads);
+          outputJson(threads, { plain: !options.html });
         }
       )
     );
