@@ -1,6 +1,6 @@
 {
   "name": "@stephendolan/helpscout-cli",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "A command-line interface for Help Scout",
   "type": "module",
   "main": "./dist/cli.js",
@@ -48,7 +48,6 @@
     "commander": "^12.0.0",
     "conf": "^12.0.0",
     "dayjs": "^1.11.19",
-    "dotenv": "^16.4.0",
     "html-to-text": "^9.0.5"
   },
   "devDependencies": {

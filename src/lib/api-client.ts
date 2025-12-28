@@ -1,6 +1,5 @@
 import { auth } from './auth.js';
 import { HelpScoutCliError, HelpScoutApiError } from './errors.js';
-import dotenv from 'dotenv';
 import type {
   Conversation,
   Customer,
@@ -10,8 +9,6 @@ import type {
   Thread,
   PageInfo,
 } from '../types/index.js';
-
-dotenv.config();
 
 const API_BASE = 'https://api.helpscout.net/v2';
 const TOKEN_URL = 'https://api.helpscout.net/v2/oauth2/token';
