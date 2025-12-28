@@ -87,6 +87,105 @@ function stripTagStyles(data: unknown): unknown {
   return data;
 }
 
+export function buildName(first?: string, last?: string): string | undefined {
+  const name = [first, last].filter(Boolean).join(' ');
+  return name || undefined;
+}
+
+function isPersonObject(data: Record<string, unknown>): boolean {
+  return ('first' in data || 'last' in data) && ('email' in data || 'id' in data);
+}
+
+function isPlaceholderPerson(data: Record<string, unknown>): boolean {
+  return data.id === 0 || data.first === 'unknown';
+}
+
+function addNameToPersonObjects(data: unknown): unknown {
+  if (Array.isArray(data)) {
+    return data.map(addNameToPersonObjects);
+  }
+
+  if (isObject(data)) {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      result[key] = addNameToPersonObjects(value);
+    }
+
+    if (isPersonObject(result) && !isPlaceholderPerson(result)) {
+      const name = buildName(result.first as string | undefined, result.last as string | undefined);
+      if (name) {
+        result.name = name;
+      }
+    }
+
+    return result;
+  }
+
+  return data;
+}
+
+function stripPlaceholderValues(data: unknown): unknown {
+  if (Array.isArray(data)) {
+    return data.map(stripPlaceholderValues);
+  }
+
+  if (isObject(data)) {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      if (key === 'closedBy' && value === 0) continue;
+      if (key === 'savedReplyId' && value === 0) continue;
+
+      if (isObject(value) && isPlaceholderPerson(value)) continue;
+
+      result[key] = stripPlaceholderValues(value);
+    }
+
+    return result;
+  }
+
+  return data;
+}
+
+function stripEmptyArrays(data: unknown): unknown {
+  if (Array.isArray(data)) {
+    return data.map(stripEmptyArrays);
+  }
+
+  if (isObject(data)) {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      if (Array.isArray(value) && value.length === 0) continue;
+      result[key] = stripEmptyArrays(value);
+    }
+
+    return result;
+  }
+
+  return data;
+}
+
+function stripPhotoUrls(data: unknown): unknown {
+  if (Array.isArray(data)) {
+    return data.map(stripPhotoUrls);
+  }
+
+  if (isObject(data)) {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      if (key === 'photoUrl') continue;
+      result[key] = stripPhotoUrls(value);
+    }
+
+    return result;
+  }
+
+  return data;
+}
+
 function selectFields(data: unknown, fields: string[]): unknown {
   if (Array.isArray(data)) {
     return data.map((item) => selectFields(item, fields));
@@ -128,6 +227,10 @@ export function outputJson(data: unknown, options: OutputOptions = {}): void {
   }
 
   processed = stripTagStyles(processed);
+  processed = addNameToPersonObjects(processed);
+  processed = stripPlaceholderValues(processed);
+  processed = stripEmptyArrays(processed);
+  processed = stripPhotoUrls(processed);
 
   if (mergedOptions.fields) {
     const fieldList = mergedOptions.fields.split(',').map((f) => f.trim());
