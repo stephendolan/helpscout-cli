@@ -6,6 +6,22 @@ import { auth } from '../lib/auth.js';
 import { buildDateQuery } from '../lib/dates.js';
 import type { Conversation } from '../types/index.js';
 
+const toolRegistry = [
+  { name: 'list_conversations', description: 'List conversations with optional filtering by status, mailbox, tag, assignee, or date range' },
+  { name: 'get_conversation', description: 'Get detailed information about a specific conversation including threads' },
+  { name: 'search_conversations', description: 'Search all conversations matching a query (fetches all pages)' },
+  { name: 'get_conversations_summary', description: 'Get aggregated summary of conversations by status and tag (for weekly briefings)' },
+  { name: 'list_mailboxes', description: 'List all mailboxes in the Help Scout account' },
+  { name: 'get_mailbox', description: 'Get detailed information about a specific mailbox' },
+  { name: 'list_customers', description: 'List customers with optional filtering' },
+  { name: 'get_customer', description: 'Get detailed information about a specific customer' },
+  { name: 'list_tags', description: 'List all tags in the Help Scout account' },
+  { name: 'list_workflows', description: 'List workflows with optional filtering' },
+  { name: 'create_note', description: 'Add a private note to a conversation' },
+  { name: 'add_tag', description: 'Add a tag to a conversation' },
+  { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
+];
+
 interface ConversationSummary {
   total: number;
   byStatus: Record<string, number>;
@@ -81,10 +97,7 @@ server.tool(
   'Search all conversations matching a query (fetches all pages)',
   {
     query: z.string().optional().describe('Search query (e.g., "email:domain.com", "subject:billing")'),
-    status: z
-      .enum(['active', 'pending', 'closed', 'spam', 'all'])
-      .optional()
-      .describe('Status filter'),
+    status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter'),
     createdSince: z.string().optional().describe('Show conversations created after this date (ISO 8601)'),
     createdBefore: z.string().optional().describe('Show conversations created before this date'),
     modifiedSince: z.string().optional().describe('Show conversations modified after this date'),
@@ -100,10 +113,7 @@ server.tool(
   'get_conversations_summary',
   'Get aggregated summary of conversations by status and tag (for weekly briefings)',
   {
-    status: z
-      .enum(['active', 'pending', 'closed', 'spam', 'all'])
-      .optional()
-      .describe('Status filter'),
+    status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter'),
     mailbox: z.string().optional().describe('Mailbox ID to filter by'),
     tag: z.string().optional().describe('Tag to filter by'),
     createdSince: z.string().optional().describe('Show conversations created after this date (ISO 8601)'),
@@ -118,11 +128,8 @@ server.tool(
   }
 );
 
-server.tool(
-  'list_mailboxes',
-  'List all mailboxes in the Help Scout account',
-  {},
-  async () => jsonResponse(await client.listMailboxes())
+server.tool('list_mailboxes', 'List all mailboxes in the Help Scout account', {}, async () =>
+  jsonResponse(await client.listMailboxes())
 );
 
 server.tool(
@@ -196,11 +203,25 @@ server.tool(
   }
 );
 
+server.tool('check_auth', 'Check if Help Scout authentication is configured', {}, async () =>
+  jsonResponse({ authenticated: await auth.isAuthenticated() })
+);
+
 server.tool(
-  'check_auth',
-  'Check if Help Scout authentication is configured',
-  {},
-  async () => jsonResponse({ authenticated: await auth.isAuthenticated() })
+  'search_tools',
+  'Search for available tools by name or description using regex. Returns matching tool names.',
+  {
+    query: z.string().describe('Regex pattern to match against tool names and descriptions (case-insensitive)'),
+  },
+  async ({ query }) => {
+    try {
+      const pattern = new RegExp(query, 'i');
+      const matches = toolRegistry.filter((t) => pattern.test(t.name) || pattern.test(t.description));
+      return jsonResponse({ tools: matches });
+    } catch {
+      return jsonResponse({ error: 'Invalid regex pattern' });
+    }
+  }
 );
 
 export async function runMcpServer() {
