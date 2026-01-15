@@ -7,12 +7,6 @@ const REFRESH_TOKEN_ACCOUNT = 'refresh-token';
 const APP_ID_ACCOUNT = 'app-id';
 const APP_SECRET_ACCOUNT = 'app-secret';
 
-const KEYRING_UNAVAILABLE_ERROR =
-  'Keychain storage unavailable. Cannot store credentials securely.\n' +
-  'On Linux, install libsecret: sudo apt-get install libsecret-1-dev\n' +
-  'Then reinstall: bun install -g @stephendolan/helpscout-cli\n' +
-  'Alternatively, use HELPSCOUT_APP_ID and HELPSCOUT_APP_SECRET environment variables.';
-
 const keyringCache = new Map<string, Entry | null>();
 
 function getKeyring(account: string): Entry | null {
@@ -41,12 +35,13 @@ async function getPassword(account: string): Promise<string | null> {
   return null;
 }
 
-async function setPassword(account: string, value: string): Promise<void> {
+async function setPassword(account: string, value: string): Promise<boolean> {
   const entry = getKeyring(account);
   if (!entry) {
-    throw new Error(KEYRING_UNAVAILABLE_ERROR);
+    return false;
   }
   entry.setPassword(value);
+  return true;
 }
 
 async function deletePassword(account: string): Promise<boolean> {
@@ -62,7 +57,7 @@ export class AuthManager {
     return getPassword(ACCESS_TOKEN_ACCOUNT);
   }
 
-  async setAccessToken(token: string): Promise<void> {
+  async setAccessToken(token: string): Promise<boolean> {
     return setPassword(ACCESS_TOKEN_ACCOUNT, token);
   }
 
@@ -70,7 +65,7 @@ export class AuthManager {
     return getPassword(REFRESH_TOKEN_ACCOUNT);
   }
 
-  async setRefreshToken(token: string): Promise<void> {
+  async setRefreshToken(token: string): Promise<boolean> {
     return setPassword(REFRESH_TOKEN_ACCOUNT, token);
   }
 
@@ -79,7 +74,7 @@ export class AuthManager {
     return keychainValue || process.env.HELPSCOUT_APP_ID || null;
   }
 
-  async setAppId(appId: string): Promise<void> {
+  async setAppId(appId: string): Promise<boolean> {
     return setPassword(APP_ID_ACCOUNT, appId);
   }
 
@@ -88,7 +83,7 @@ export class AuthManager {
     return keychainValue || process.env.HELPSCOUT_APP_SECRET || null;
   }
 
-  async setAppSecret(appSecret: string): Promise<void> {
+  async setAppSecret(appSecret: string): Promise<boolean> {
     return setPassword(APP_SECRET_ACCOUNT, appSecret);
   }
 
