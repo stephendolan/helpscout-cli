@@ -25,14 +25,16 @@ function getKeyring(account: string): Entry | null {
 
 async function getPassword(account: string): Promise<string | null> {
   const entry = getKeyring(account);
-  if (entry) {
-    try {
-      return entry.getPassword();
-    } catch {
-      return null;
-    }
+  if (!entry) {
+    return null;
   }
-  return null;
+  try {
+    const password = entry.getPassword();
+    return password ?? null;
+  } catch {
+    // Expected in headless environments without keyring access
+    return null;
+  }
 }
 
 async function setPassword(account: string, value: string): Promise<boolean> {
@@ -40,16 +42,25 @@ async function setPassword(account: string, value: string): Promise<boolean> {
   if (!entry) {
     return false;
   }
-  entry.setPassword(value);
-  return true;
+  try {
+    entry.setPassword(value);
+    return true;
+  } catch {
+    // Keyring may be available but unusable (no daemon, permissions, etc.)
+    return false;
+  }
 }
 
 async function deletePassword(account: string): Promise<boolean> {
   const entry = getKeyring(account);
-  if (entry) {
-    return entry.deletePassword();
+  if (!entry) {
+    return false;
   }
-  return false;
+  try {
+    return entry.deletePassword();
+  } catch {
+    return false;
+  }
 }
 
 export class AuthManager {
