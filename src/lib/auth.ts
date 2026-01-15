@@ -93,21 +93,18 @@ export class AuthManager {
   }
 
   async isAuthenticated(): Promise<boolean> {
-    return (await this.getAccessToken()) !== null;
+    if ((await this.getAccessToken()) !== null) {
+      return true;
+    }
+    const appId = await this.getAppId();
+    const appSecret = await this.getAppSecret();
+    return !!(appId && appSecret);
   }
 
   async logout(): Promise<void> {
     await deletePassword(ACCESS_TOKEN_ACCOUNT);
     await deletePassword(REFRESH_TOKEN_ACCOUNT);
     config.clearDefaultMailbox();
-  }
-
-  async clearAll(): Promise<void> {
-    await deletePassword(ACCESS_TOKEN_ACCOUNT);
-    await deletePassword(REFRESH_TOKEN_ACCOUNT);
-    await deletePassword(APP_ID_ACCOUNT);
-    await deletePassword(APP_SECRET_ACCOUNT);
-    config.clear();
   }
 }
 
