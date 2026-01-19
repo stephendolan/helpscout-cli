@@ -183,9 +183,13 @@ server.tool(
   {
     conversationId: z.number().describe('Conversation ID'),
     text: z.string().describe('Note text content'),
+    status: z
+      .enum(['active', 'closed', 'pending'])
+      .optional()
+      .describe('Set conversation status after note'),
   },
-  async ({ conversationId, text }) => {
-    await client.createNote(conversationId, { text });
+  async ({ conversationId, text, status }) => {
+    await client.createNote(conversationId, { text, status });
     return jsonResponse({ success: true });
   }
 );
