@@ -57,8 +57,8 @@ server.tool(
   {
     status: z
       .enum(['active', 'pending', 'closed', 'spam', 'all'])
-      .optional()
-      .describe('Conversation status filter'),
+      .default('all')
+      .describe('Conversation status filter (defaults to "all" to include resolved tickets)'),
     mailbox: z.string().optional().describe('Mailbox ID to filter by'),
     tag: z.string().optional().describe('Tag to filter by'),
     assignedTo: z.string().optional().describe('User ID assigned to'),
@@ -97,7 +97,7 @@ server.tool(
   'Search all conversations matching a query (fetches all pages)',
   {
     query: z.string().optional().describe('Search query (e.g., "email:domain.com", "subject:billing")'),
-    status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter'),
+    status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).default('all').describe('Status filter (defaults to "all" to include resolved tickets)'),
     createdSince: z.string().optional().describe('Show conversations created after this date (ISO 8601)'),
     createdBefore: z.string().optional().describe('Show conversations created before this date'),
     modifiedSince: z.string().optional().describe('Show conversations modified after this date'),
