@@ -4,12 +4,14 @@ import { z } from 'zod';
 import { client } from '../lib/api-client.js';
 import { auth } from '../lib/auth.js';
 import { buildDateQuery } from '../lib/dates.js';
+import { normalizeSearchQuery } from '../lib/search.js';
 import type { Conversation } from '../types/index.js';
 
 const toolRegistry = [
   { name: 'list_conversations', description: 'List conversations with optional filtering by status, mailbox, tag, assignee, or date range' },
   { name: 'get_conversation', description: 'Get detailed information about a specific conversation including threads' },
   { name: 'search_conversations', description: 'Search all conversations matching a query (fetches all pages)' },
+  { name: 'search_by_customer', description: 'Find all conversations involving a customer by email — searches primary email and domain, deduplicates results' },
   { name: 'get_conversations_summary', description: 'Get aggregated summary of conversations by status and tag (for weekly briefings)' },
   { name: 'list_mailboxes', description: 'List all mailboxes in the Help Scout account' },
   { name: 'get_mailbox', description: 'Get detailed information about a specific mailbox' },
@@ -51,6 +53,32 @@ function jsonResponse(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
 }
 
+const dateFilterSchema = {
+  createdSince: z.string().optional().describe('Filter by creation date — returns only conversations created after this date. Does not include older conversations with recent activity; use modifiedSince for that.'),
+  createdBefore: z.string().optional().describe('Filter by creation date — returns only conversations created before this date'),
+  modifiedSince: z.string().optional().describe('Filter by last activity date — returns conversations with ANY activity (replies, notes, status changes, tag changes) after this date, including old conversations. Use createdSince to filter by creation date instead.'),
+  modifiedBefore: z.string().optional().describe('Filter by last activity date — returns conversations with last activity before this date'),
+};
+
+const GENERIC_EMAIL_DOMAINS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'yahoo.com',
+  'yahoo.co.uk',
+  'hotmail.com',
+  'outlook.com',
+  'live.com',
+  'icloud.com',
+  'me.com',
+  'mac.com',
+  'aol.com',
+  'hey.com',
+  'protonmail.com',
+  'proton.me',
+  'fastmail.com',
+  'tutanota.com',
+]);
+
 server.tool(
   'list_conversations',
   'List conversations with optional filtering by status, mailbox, tag, assignee, or date range',
@@ -62,15 +90,13 @@ server.tool(
     mailbox: z.string().optional().describe('Mailbox ID to filter by'),
     tag: z.string().optional().describe('Tag to filter by'),
     assignedTo: z.string().optional().describe('User ID assigned to'),
-    query: z.string().optional().describe('Search query'),
+    query: z.string().optional().describe('Search query. Multi-word queries are automatically AND-joined unless explicit boolean operators (AND, OR, NOT) are present.'),
     page: z.number().optional().describe('Page number'),
-    createdSince: z.string().optional().describe('Show conversations created after this date (ISO 8601 or natural language like "2026-01-05")'),
-    createdBefore: z.string().optional().describe('Show conversations created before this date'),
-    modifiedSince: z.string().optional().describe('Show conversations modified after this date'),
-    modifiedBefore: z.string().optional().describe('Show conversations modified before this date'),
+    ...dateFilterSchema,
   },
   async ({ status = 'all', mailbox, tag, assignedTo, query, page, createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
-    const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore }, query);
+    const normalizedQuery = normalizeSearchQuery(query);
+    const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore }, normalizedQuery);
     return jsonResponse(await client.listConversations({ status, mailbox, tag, assignedTo, query: dateQuery, page }));
   }
 );
@@ -96,15 +122,13 @@ server.tool(
   'search_conversations',
   'Search all conversations matching a query (fetches all pages)',
   {
-    query: z.string().optional().describe('Search query (e.g., "email:domain.com", "subject:billing")'),
+    query: z.string().optional().describe('Search query (e.g., "email:domain.com", "subject:billing"). Multi-word queries are automatically AND-joined unless explicit boolean operators (AND, OR, NOT) are present.'),
     status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter (defaults to "all" to include resolved tickets)'),
-    createdSince: z.string().optional().describe('Show conversations created after this date (ISO 8601)'),
-    createdBefore: z.string().optional().describe('Show conversations created before this date'),
-    modifiedSince: z.string().optional().describe('Show conversations modified after this date'),
-    modifiedBefore: z.string().optional().describe('Show conversations modified before this date'),
+    ...dateFilterSchema,
   },
   async ({ query, status = 'all', createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
-    const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore }, query);
+    const normalizedQuery = normalizeSearchQuery(query);
+    const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore }, normalizedQuery);
     return jsonResponse(await client.listAllConversations({ query: dateQuery, status }));
   }
 );
@@ -116,10 +140,7 @@ server.tool(
     status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter'),
     mailbox: z.string().optional().describe('Mailbox ID to filter by'),
     tag: z.string().optional().describe('Tag to filter by'),
-    createdSince: z.string().optional().describe('Show conversations created after this date (ISO 8601)'),
-    createdBefore: z.string().optional().describe('Show conversations created before this date'),
-    modifiedSince: z.string().optional().describe('Show conversations modified after this date'),
-    modifiedBefore: z.string().optional().describe('Show conversations modified before this date'),
+    ...dateFilterSchema,
   },
   async ({ status, mailbox, tag, createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
     const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore });
@@ -200,6 +221,59 @@ server.tool(
   async ({ conversationId, tag }) => {
     await client.addConversationTag(conversationId, tag);
     return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'search_by_customer',
+  "Find all conversations involving a customer by email address. Searches both the primary customer email and the email domain to catch CC'd addresses, tickets filed by teammates, and billing contacts. Results are deduplicated. Domain search is skipped for generic email providers (gmail, yahoo, etc.) to avoid irrelevant results.",
+  {
+    email: z.string().email().describe('Customer email address'),
+    status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter (defaults to "all")'),
+    ...dateFilterSchema,
+  },
+  async ({ email, status = 'all', createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
+    const domain = email.split('@')[1];
+    const dateFilters = { createdSince, createdBefore, modifiedSince, modifiedBefore };
+
+    const emailQuery = buildDateQuery(dateFilters, `email:${email}`);
+    const emailSearch = client.listAllConversations({ query: emailQuery, status });
+
+    const isGenericDomain = GENERIC_EMAIL_DOMAINS.has(domain);
+    const domainSearch = isGenericDomain
+      ? Promise.resolve([] as Conversation[])
+      : client.listAllConversations({
+          query: buildDateQuery(dateFilters, `@${domain}`),
+          status,
+        });
+
+    const [emailResults, domainResults] = await Promise.all([emailSearch, domainSearch]);
+
+    const seen = new Set<number>();
+    const results: Conversation[] = [];
+
+    for (const conv of emailResults) {
+      seen.add(conv.id);
+      results.push(conv);
+    }
+    for (const conv of domainResults) {
+      if (!seen.has(conv.id)) {
+        seen.add(conv.id);
+        results.push(conv);
+      }
+    }
+
+    return jsonResponse({
+      conversations: results,
+      meta: {
+        email,
+        domain,
+        domainSearchSkipped: isGenericDomain,
+        emailResults: emailResults.length,
+        domainResults: domainResults.length,
+        totalAfterDedup: results.length,
+      },
+    });
   }
 );
 
