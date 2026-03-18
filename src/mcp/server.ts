@@ -10,7 +10,7 @@ import type { Conversation } from '../types/index.js';
 const toolRegistry = [
   { name: 'list_conversations', description: 'List conversations with optional filtering by status, mailbox, tag, assignee, or date range' },
   { name: 'get_conversation', description: 'Get detailed information about a specific conversation including threads' },
-  { name: 'search_conversations', description: 'Search all conversations matching a query (fetches all pages)' },
+  { name: 'search_conversations', description: 'Search all conversations matching a query (fetches all pages). WARNING: Compound filters (e.g., "email:user@domain.com billing") are unreliable — the API may ignore parts of the query. Use one filter per call and combine results.' },
   { name: 'search_by_customer', description: 'Find all conversations involving a customer by email — searches primary email and domain, deduplicates results' },
   { name: 'get_conversations_summary', description: 'Get aggregated summary of conversations by status and tag (for weekly briefings)' },
   { name: 'list_mailboxes', description: 'List all mailboxes in the Help Scout account' },
@@ -120,9 +120,9 @@ server.tool(
 
 server.tool(
   'search_conversations',
-  'Search all conversations matching a query (fetches all pages)',
+  'Search all conversations matching a query (fetches all pages). WARNING: Compound filters (e.g., "email:user@domain.com billing") are unreliable — the API may ignore parts of the query. Use one filter per call and combine results.',
   {
-    query: z.string().optional().describe('Search query (e.g., "email:domain.com", "subject:billing"). Multi-word queries are automatically AND-joined unless explicit boolean operators (AND, OR, NOT) are present.'),
+    query: z.string().optional().describe('Search query (e.g., "email:domain.com", "subject:billing"). IMPORTANT: Compound queries mixing a prefix filter with keywords (e.g., "email:user@domain.com billing") are unreliable — the API may silently drop part of the filter. Make separate calls for each filter and combine results client-side.'),
     status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter (defaults to "all" to include resolved tickets)'),
     ...dateFilterSchema,
   },
