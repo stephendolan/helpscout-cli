@@ -115,7 +115,7 @@ export class HelpScoutClient {
     return this.refreshAccessToken();
   }
 
-  private async request<T>(
+  private async rawRequest(
     method: string,
     path: string,
     options: {
@@ -124,7 +124,7 @@ export class HelpScoutClient {
       retry?: boolean;
       rateLimitRetry?: boolean;
     } = {}
-  ): Promise<T> {
+  ): Promise<Response> {
     const { params, body, retry = true, rateLimitRetry = true } = options;
 
     const url = new URL(`${API_BASE}${path}`);
@@ -159,7 +159,7 @@ export class HelpScoutClient {
     if (response.status === 401 && retry) {
       this.accessToken = null;
       await this.refreshAccessToken();
-      return this.request(method, path, { ...options, retry: false });
+      return this.rawRequest(method, path, { ...options, retry: false });
     }
 
     if (response.status === 429 && rateLimitRetry) {
@@ -169,11 +169,7 @@ export class HelpScoutClient {
         JSON.stringify({ warning: `Rate limited. Waiting ${waitSeconds}s before retry...` })
       );
       await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
-      return this.request(method, path, { ...options, rateLimitRetry: false });
-    }
-
-    if (response.status === 204) {
-      return {} as T;
+      return this.rawRequest(method, path, { ...options, rateLimitRetry: false });
     }
 
     if (!response.ok) {
@@ -181,6 +177,23 @@ export class HelpScoutClient {
       throw new HelpScoutApiError('API request failed', error, response.status);
     }
 
+    return response;
+  }
+
+  private async request<T>(
+    method: string,
+    path: string,
+    options: {
+      params?: Record<string, string | number | boolean | undefined>;
+      body?: unknown;
+      retry?: boolean;
+      rateLimitRetry?: boolean;
+    } = {}
+  ): Promise<T> {
+    const response = await this.rawRequest(method, path, options);
+    if (response.status === 204) {
+      return {} as T;
+    }
     return response.json() as Promise<T>;
   }
 
@@ -280,16 +293,58 @@ export class HelpScoutClient {
     });
   }
 
-  async createReply(
+  async createDraftReply(
     conversationId: number,
     data: {
       text: string;
       user?: number;
-      draft?: boolean;
-      status?: string;
     }
   ) {
-    await this.request<void>('POST', `/conversations/${conversationId}/reply`, { body: data });
+    await this.request<void>('POST', `/conversations/${conversationId}/reply`, {
+      body: { ...data, draft: true },
+    });
+  }
+
+  async createDraftConversation(data: {
+    subject: string;
+    mailboxId: number;
+    customerEmail: string;
+    text: string;
+    type?: 'email' | 'chat' | 'phone';
+    status?: 'active' | 'pending' | 'closed';
+    user?: number;
+    tags?: string[];
+  }): Promise<{ id: number }> {
+    const { subject, mailboxId, customerEmail, text, type = 'email', status = 'active', user, tags } = data;
+    const response = await this.rawRequest('POST', '/conversations', {
+      body: {
+        subject,
+        mailboxId,
+        type,
+        status,
+        customer: { email: customerEmail },
+        threads: [
+          {
+            type: 'reply',
+            customer: { email: customerEmail },
+            text,
+            draft: true,
+            ...(user !== undefined && { user }),
+          },
+        ],
+        ...(tags && { tags }),
+      },
+    });
+
+    const location = response.headers.get('Location') || '';
+    const match = location.match(/\/conversations\/(\d+)/);
+    if (!match) {
+      throw new HelpScoutCliError(
+        'Draft conversation created but could not parse ID from Location header',
+        0,
+      );
+    }
+    return { id: parseInt(match[1], 10) };
   }
 
   async createNote(

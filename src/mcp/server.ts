@@ -89,8 +89,9 @@ const toolRegistry = [
   { name: 'get_customer', description: 'Get detailed information about a specific customer' },
   { name: 'list_tags', description: 'List all tags in the Help Scout account' },
   { name: 'list_workflows', description: 'List workflows with optional filtering' },
-  { name: 'create_note', description: 'Add a private note to a conversation' },
-  { name: 'create_draft', description: 'Create a draft reply on a conversation (saves without sending)' },
+  { name: 'create_note', description: 'Add a private note to an existing conversation' },
+  { name: 'create_draft_reply', description: 'Create a draft reply on an existing conversation (saves without sending). Use when responding to a ticket.' },
+  { name: 'create_draft_conversation', description: 'Create a brand-new outbound draft conversation for proactive customer outreach (saves without sending). Use when starting a new ticket from scratch.' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
 ];
@@ -288,15 +289,41 @@ server.tool(
 );
 
 server.tool(
-  'create_draft',
-  'Create a draft reply on a conversation (saves without sending)',
+  'create_draft_reply',
+  'Create a draft reply on an existing conversation (saves without sending). Use this when responding to an existing ticket — the draft is reviewed and sent from the Help Scout UI. For starting a brand-new outbound conversation, use create_draft_conversation instead.',
   {
-    conversationId: z.number().describe('Conversation ID'),
-    text: z.string().describe('Draft reply text content'),
+    conversationId: z.number().describe('Existing conversation ID to attach the draft reply to'),
+    text: z.string().describe('Draft reply text content (HTML or plain text)'),
   },
   async ({ conversationId, text }) => {
-    await client.createReply(conversationId, { text, draft: true });
+    await client.createDraftReply(conversationId, { text });
     return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'create_draft_conversation',
+  'Create a brand-new outbound draft conversation for proactive customer outreach (saves without sending). Use this when starting a new ticket from scratch — the draft is reviewed and sent from the Help Scout UI. For replying to an existing conversation, use create_draft_reply instead.',
+  {
+    mailboxId: z.number().describe('Mailbox ID to create the conversation in'),
+    customerEmail: z.string().email().describe('Recipient customer email address'),
+    subject: z.string().describe('Conversation subject line'),
+    text: z.string().describe('Draft message body (HTML or plain text)'),
+    type: z.enum(['email', 'chat', 'phone']).optional().describe('Conversation medium (default "email")'),
+    status: z.enum(['active', 'pending', 'closed']).optional().describe('Conversation status (default "active")'),
+    tags: z.array(z.string()).optional().describe('Tags to apply to the conversation'),
+  },
+  async ({ mailboxId, customerEmail, subject, text, type, status, tags }) => {
+    const result = await client.createDraftConversation({
+      mailboxId,
+      customerEmail,
+      subject,
+      text,
+      type,
+      status,
+      tags,
+    });
+    return jsonResponse({ success: true, conversationId: result.id });
   }
 );
 

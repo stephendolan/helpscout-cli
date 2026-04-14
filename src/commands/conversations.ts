@@ -285,13 +285,11 @@ export function createConversationsCommand(): Command {
     );
 
   cmd
-    .command('reply')
-    .description('Reply to a conversation')
+    .command('draft-reply')
+    .description('Create a draft reply on an existing conversation (never sends — review and send from the Help Scout UI)')
     .argument('<id>', 'Conversation ID')
     .requiredOption('--text <text>', 'Reply text')
-    .option('--user <id>', 'User ID sending the reply')
-    .option('--draft', 'Save as draft')
-    .option('--status <status>', 'Set conversation status after reply (active, closed, pending)')
+    .option('--user <id>', 'User ID authoring the draft')
     .action(
       withErrorHandling(
         async (
@@ -299,17 +297,51 @@ export function createConversationsCommand(): Command {
           options: {
             text: string;
             user?: string;
-            draft?: boolean;
-            status?: string;
           }
         ) => {
-          await client.createReply(parseIdArg(id, 'conversation'), {
+          await client.createDraftReply(parseIdArg(id, 'conversation'), {
             text: options.text,
             user: options.user ? parseIdArg(options.user, 'user') : undefined,
-            draft: options.draft,
-            status: options.status,
           });
-          outputJson({ message: 'Reply sent' });
+          outputJson({ message: 'Draft reply created' });
+        }
+      )
+    );
+
+  cmd
+    .command('draft-conversation')
+    .description('Create a new outbound draft conversation (never sends — review and send from the Help Scout UI)')
+    .requiredOption('--mailbox <id>', 'Mailbox ID to create the conversation in')
+    .requiredOption('--customer-email <email>', 'Recipient customer email address')
+    .requiredOption('--subject <subject>', 'Conversation subject')
+    .requiredOption('--text <text>', 'Draft message body')
+    .option('--user <id>', 'User ID authoring the draft')
+    .option('--type <type>', 'Conversation type: email, chat, or phone (default email)')
+    .option('--status <status>', 'Conversation status: active, pending, or closed (default active)')
+    .option('--tag <tag...>', 'Tag to apply (repeatable)')
+    .action(
+      withErrorHandling(
+        async (options: {
+          mailbox: string;
+          customerEmail: string;
+          subject: string;
+          text: string;
+          user?: string;
+          type?: 'email' | 'chat' | 'phone';
+          status?: 'active' | 'pending' | 'closed';
+          tag?: string[];
+        }) => {
+          const result = await client.createDraftConversation({
+            mailboxId: parseIdArg(options.mailbox, 'mailbox'),
+            customerEmail: options.customerEmail,
+            subject: options.subject,
+            text: options.text,
+            user: options.user ? parseIdArg(options.user, 'user') : undefined,
+            type: options.type,
+            status: options.status,
+            tags: options.tag,
+          });
+          outputJson({ message: 'Draft conversation created', conversationId: result.id });
         }
       )
     );
