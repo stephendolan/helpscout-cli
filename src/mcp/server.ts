@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { client } from '../lib/api-client.js';
@@ -6,10 +6,29 @@ import { auth } from '../lib/auth.js';
 import { normalizeConversationStatus } from '../lib/conversation-status.js';
 import { buildDateQuery } from '../lib/dates.js';
 import { normalizeSearchQuery } from '../lib/search.js';
-import type { Conversation, Thread } from '../types/index.js';
+import type {
+  Conversation,
+  Customer,
+  Mailbox,
+  Tag,
+  Thread,
+  Workflow,
+} from '../types/index.js';
+
+declare const __VERSION__: string;
+declare const __HOMEPAGE__: string;
 
 const DEFAULT_MAX_RESULTS = 25;
 const DEFAULT_MAX_THREADS = 20;
+
+type JsonObject = Record<string, unknown>;
+type ResourceLinkBlock = {
+  type: 'resource_link';
+  uri: string;
+  name: string;
+  description: string;
+  mimeType: 'application/json';
+};
 
 /**
  * Strip HAL navigation links, photo URLs, placeholder values, and tag styles
@@ -29,7 +48,7 @@ function cleanForMcp(data: unknown): unknown {
     if (key === 'color' && Object.keys(obj).includes('name') && Object.keys(obj).includes('slug')) continue; // tag style
     if (key === 'styles' && Object.keys(obj).includes('name') && Object.keys(obj).includes('slug')) continue; // tag style
 
-    // Strip zero-valued IDs (HelpScout placeholder convention)
+    // Strip zero-valued IDs (Help Scout placeholder convention)
     if (key === 'id' && value === 0) continue;
     // Strip first/last when we'll synthesize a combined name below
     if ((key === 'first' || key === 'last') && ('first' in obj || 'last' in obj)) continue;
@@ -48,12 +67,83 @@ function cleanForMcp(data: unknown): unknown {
   return result;
 }
 
+function asRecord(value: unknown): JsonObject {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as JsonObject)
+    : {};
+}
+
+function normalizeConversation(conversation: Conversation): JsonObject {
+  const cleaned = asRecord(cleanForMcp(conversation));
+
+  if (typeof cleaned.threads === 'number') {
+    const { threads, ...rest } = cleaned;
+    return { ...rest, threadCount: threads };
+  }
+
+  return cleaned;
+}
+
+function normalizeConversations(conversations: Conversation[]) {
+  return conversations.map(normalizeConversation);
+}
+
+function cleanCustomer(customer: Customer) {
+  return asRecord(cleanForMcp(customer));
+}
+
+function cleanMailbox(mailbox: Mailbox) {
+  return asRecord(cleanForMcp(mailbox));
+}
+
+function cleanTag(tag: Tag) {
+  return asRecord(cleanForMcp(tag));
+}
+
+function cleanWorkflow(workflow: Workflow) {
+  return asRecord(cleanForMcp(workflow));
+}
+
+function jsonTextContent(data: unknown) {
+  return {
+    type: 'text' as const,
+    text: JSON.stringify(data, null, 2),
+  };
+}
+
+function resourceLinkContent(uri: string, name: string, description: string): ResourceLinkBlock {
+  return {
+    type: 'resource_link',
+    uri,
+    name,
+    description,
+    mimeType: 'application/json',
+  };
+}
+
+function structuredJsonResult<T extends JsonObject>(
+  structuredContent: T,
+  extraContent: ResourceLinkBlock[] = [],
+) {
+  return {
+    content: [jsonTextContent(structuredContent), ...extraContent],
+    structuredContent,
+  };
+}
+
+function textJsonResult(data: unknown, isError = false) {
+  return {
+    content: [jsonTextContent(data)],
+    ...(isError && { isError: true }),
+  };
+}
+
 /** Wrap search results with omission metadata when capped. */
 function withOmissionMeta(all: Conversation[], maxResults: number) {
   const total = all.length;
   const conversations = total > maxResults ? all.slice(0, maxResults) : all;
   return {
-    conversations: cleanForMcp(conversations),
+    conversations: normalizeConversations(conversations),
     ...(total > maxResults && {
       total_results: total,
       returned: maxResults,
@@ -67,9 +157,11 @@ function capThreads(threads: Thread[], maxThreads: number) {
   if (threads.length <= maxThreads) {
     return { threads: cleanForMcp(threads) as unknown[] };
   }
+
   const kept = maxThreads <= 1
     ? [threads[0]]
     : [threads[0], ...threads.slice(-(maxThreads - 1))];
+
   return {
     threads: cleanForMcp(kept) as unknown[],
     total_threads: threads.length,
@@ -78,31 +170,311 @@ function capThreads(threads: Thread[], maxThreads: number) {
   };
 }
 
-const toolRegistry = [
-  { name: 'list_conversations', description: 'List conversations with optional filtering by status, mailbox, tag, assignee, or date range' },
-  { name: 'get_conversation', description: 'Get detailed information about a specific conversation including threads' },
-  { name: 'search_conversations', description: 'Search all conversations matching a query (fetches all pages). WARNING: Compound filters (e.g., "email:user@domain.com billing") are unreliable — the API may ignore parts of the query. Use one filter per call and combine results.' },
-  { name: 'search_by_customer', description: 'Find all conversations involving a customer by email — searches primary email and domain, deduplicates results' },
-  { name: 'get_conversations_summary', description: 'Get aggregated summary of conversations by status and tag (for weekly briefings)' },
-  { name: 'list_mailboxes', description: 'List all mailboxes in the Help Scout account' },
-  { name: 'get_mailbox', description: 'Get detailed information about a specific mailbox' },
-  { name: 'list_customers', description: 'List customers with optional filtering' },
-  { name: 'get_customer', description: 'Get detailed information about a specific customer' },
-  { name: 'list_tags', description: 'List all tags in the Help Scout account' },
-  { name: 'list_workflows', description: 'List workflows with optional filtering' },
-  { name: 'create_note', description: 'Add a private note to an existing conversation' },
-  { name: 'create_draft_reply', description: 'Create a draft reply on an existing conversation (saves without sending). Use when responding to a ticket.' },
-  { name: 'create_draft_conversation', description: 'Create a brand-new outbound draft conversation for proactive customer outreach (saves without sending). Use when starting a new ticket from scratch.' },
-  { name: 'update_conversation_status', description: 'Change the status of an existing conversation' },
-  { name: 'add_tag', description: 'Add a tag to a conversation' },
-  { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
-];
+async function getConversationDetail(
+  conversationId: number,
+  includeThreads = false,
+  maxThreads = DEFAULT_MAX_THREADS,
+) {
+  const conversation = await client.getConversation(conversationId);
+  const detail: JsonObject = { conversation: normalizeConversation(conversation) };
 
-interface ConversationSummary {
+  if (!includeThreads) {
+    return detail;
+  }
+
+  const threads = await client.getConversationThreads(conversationId);
+  return { ...detail, ...capThreads(threads, maxThreads) };
+}
+
+function buildJsonResource(uri: string, data: unknown) {
+  return {
+    contents: [
+      {
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify(data, null, 2),
+      },
+    ],
+  };
+}
+
+function parseTemplateNumber(value: unknown, variableName: string): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(raw);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`Invalid ${variableName}: ${String(raw)}`);
+  }
+
+  return parsed;
+}
+
+function conversationResourceUri(conversationId: number) {
+  return `helpscout://conversation/${conversationId}`;
+}
+
+function customerResourceUri(customerId: number) {
+  return `helpscout://customer/${customerId}`;
+}
+
+const pageInfoSchema = z.object({
+  size: z.number(),
+  totalElements: z.number(),
+  totalPages: z.number(),
+  number: z.number(),
+});
+
+const personSchema = z.object({
+  id: z.number().optional(),
+  type: z.string().optional(),
+  email: z.string().optional(),
+  name: z.string().optional(),
+}).passthrough();
+
+const sourceSchema = z.object({
+  type: z.string(),
+  via: z.string(),
+}).passthrough();
+
+const tagSchema = z.object({
+  id: z.number().optional(),
+  name: z.string(),
+  slug: z.string(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  ticketCount: z.number().optional(),
+}).passthrough();
+
+const customFieldSchema = z.object({
+  id: z.number().optional(),
+  name: z.string(),
+  value: z.string(),
+  type: z.string(),
+}).passthrough();
+
+const conversationSchema = z.object({
+  id: z.number(),
+  number: z.number(),
+  type: z.string(),
+  folderId: z.number().optional(),
+  status: z.string(),
+  state: z.string(),
+  subject: z.string(),
+  preview: z.string(),
+  mailboxId: z.number(),
+  assignee: personSchema.optional(),
+  createdBy: personSchema.optional(),
+  createdAt: z.string(),
+  closedAt: z.string().optional(),
+  closedBy: z.number().optional(),
+  modifiedAt: z.string().optional(),
+  customerWaitingSince: z.object({
+    time: z.string(),
+    friendly: z.string(),
+  }).optional(),
+  source: sourceSchema.optional(),
+  tags: z.array(tagSchema).optional(),
+  cc: z.array(z.string()).optional(),
+  bcc: z.array(z.string()).optional(),
+  primaryCustomer: personSchema.optional(),
+  customFields: z.array(customFieldSchema).optional(),
+  threadCount: z.number().optional(),
+}).passthrough();
+
+const threadSchema = z.object({
+  id: z.number().optional(),
+  type: z.string(),
+  status: z.string(),
+  state: z.string(),
+  action: z.object({
+    type: z.string(),
+    text: z.string().optional(),
+  }).optional(),
+  body: z.string().optional(),
+  source: sourceSchema.optional(),
+  customer: personSchema.optional(),
+  createdBy: personSchema.optional(),
+  assignedTo: personSchema.optional(),
+  savedReplyId: z.number().optional(),
+  to: z.array(z.string()).optional(),
+  cc: z.array(z.string()).optional(),
+  bcc: z.array(z.string()).optional(),
+  createdAt: z.string(),
+  openedAt: z.string().optional(),
+}).passthrough();
+
+const customerSchema = z.object({
+  id: z.number(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  gender: z.string().optional(),
+  jobTitle: z.string().optional(),
+  location: z.string().optional(),
+  organization: z.string().optional(),
+  photoType: z.string().optional(),
+  background: z.string().optional(),
+  age: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string().optional(),
+  emails: z.array(z.object({
+    id: z.number().optional(),
+    value: z.string(),
+    type: z.string(),
+  }).passthrough()).optional(),
+  phones: z.array(z.object({
+    id: z.number().optional(),
+    value: z.string(),
+    type: z.string(),
+  }).passthrough()).optional(),
+  chats: z.array(z.object({
+    id: z.number().optional(),
+    value: z.string(),
+    type: z.string(),
+  }).passthrough()).optional(),
+  socialProfiles: z.array(z.object({
+    id: z.number().optional(),
+    value: z.string(),
+    type: z.string(),
+  }).passthrough()).optional(),
+  websites: z.array(z.object({
+    id: z.number().optional(),
+    value: z.string(),
+  }).passthrough()).optional(),
+  addresses: z.array(z.object({
+    id: z.number().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    postalCode: z.string().optional(),
+    country: z.string().optional(),
+    lines: z.array(z.string()).optional(),
+  }).passthrough()).optional(),
+}).passthrough();
+
+const mailboxSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  slug: z.string(),
+  email: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+}).passthrough();
+
+const workflowSchema = z.object({
+  id: z.number(),
+  mailboxId: z.number(),
+  type: z.string(),
+  status: z.string(),
+  order: z.number(),
+  name: z.string(),
+  createdAt: z.string(),
+  modifiedAt: z.string(),
+}).passthrough();
+
+const listConversationsOutputSchema = z.object({
+  conversations: z.array(conversationSchema),
+  page: pageInfoSchema,
+});
+
+const conversationDetailOutputSchema = z.object({
+  conversation: conversationSchema,
+  threads: z.array(threadSchema).optional(),
+  total_threads: z.number().optional(),
+  returned_threads: z.number().optional(),
+  omitted_threads: z.number().optional(),
+});
+
+const searchConversationsOutputSchema = z.object({
+  conversations: z.array(conversationSchema),
+  total_results: z.number().optional(),
+  returned: z.number().optional(),
+  omitted: z.number().optional(),
+});
+
+const searchByCustomerOutputSchema = searchConversationsOutputSchema.extend({
+  meta: z.object({
+    email: z.string(),
+    domain: z.string(),
+    domainSearchSkipped: z.boolean(),
+    emailResults: z.number(),
+    domainResults: z.number(),
+    totalAfterDedup: z.number(),
+  }),
+});
+
+const conversationSummaryOutputSchema = z.object({
+  total: z.number(),
+  byStatus: z.record(z.string(), z.number()),
+  byTag: z.record(z.string(), z.number()),
+});
+
+const listMailboxesOutputSchema = z.object({
+  mailboxes: z.array(mailboxSchema),
+  page: pageInfoSchema,
+});
+
+const listCustomersOutputSchema = z.object({
+  customers: z.array(customerSchema),
+  page: pageInfoSchema,
+});
+
+const listTagsOutputSchema = z.object({
+  tags: z.array(tagSchema),
+  page: pageInfoSchema,
+});
+
+const listWorkflowsOutputSchema = z.object({
+  workflows: z.array(workflowSchema),
+  page: pageInfoSchema,
+});
+
+const authStatusOutputSchema = z.object({
+  authenticated: z.boolean(),
+});
+
+const conversationActionOutputSchema = z.object({
+  success: z.literal(true),
+  conversationId: z.number(),
+});
+
+const conversationStatusOutputSchema = conversationActionOutputSchema.extend({
+  status: z.enum(['active', 'pending', 'closed', 'spam']),
+});
+
+const taggedConversationOutputSchema = conversationActionOutputSchema.extend({
+  tag: z.string(),
+});
+
+const draftConversationOutputSchema = z.object({
+  success: z.literal(true),
+  conversationId: z.number(),
+});
+
+const READ_ONLY_REMOTE_ANNOTATIONS = {
+  readOnlyHint: true,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+
+const READ_ONLY_LOCAL_ANNOTATIONS = {
+  readOnlyHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
+const MUTATING_REMOTE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+};
+
+const toolRegistry: Array<{ name: string; description: string }> = [];
+
+type ConversationSummary = JsonObject & {
   total: number;
   byStatus: Record<string, number>;
   byTag: Record<string, number>;
-}
+};
 
 function summarizeConversations(conversations: Conversation[]): ConversationSummary {
   const byStatus: Record<string, number> = {};
@@ -120,11 +492,13 @@ function summarizeConversations(conversations: Conversation[]): ConversationSumm
 
 const server = new McpServer({
   name: 'helpscout',
-  version: '1.0.0',
+  version: __VERSION__,
+  ...(__HOMEPAGE__ ? { websiteUrl: __HOMEPAGE__ } : {}),
+  description: 'Help Scout MCP server for mailbox, customer, tag, and workflow operations.',
 });
 
-function jsonResponse(data: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+function rememberTool(name: string, description: string) {
+  toolRegistry.push({ name, description });
 }
 
 const dateFilterSchema = {
@@ -153,167 +527,401 @@ const GENERIC_EMAIL_DOMAINS = new Set([
   'tutanota.com',
 ]);
 
-server.tool(
-  'list_conversations',
-  'List conversations with optional filtering by status, mailbox, tag, assignee, or date range',
+server.registerResource(
+  'conversation-resource',
+  new ResourceTemplate('helpscout://conversation/{conversationId}', { list: undefined }),
   {
-    status: z
-      .enum(['active', 'pending', 'closed', 'spam', 'all'])
-      .optional()
-      .describe('Conversation status filter (defaults to "all" to include resolved tickets)'),
-    mailbox: z.string().optional().describe('Mailbox ID to filter by'),
-    tag: z.string().optional().describe('Tag to filter by'),
-    assignedTo: z.string().optional().describe('User ID assigned to'),
-    query: z.string().optional().describe('Search query. Multi-word queries are automatically AND-joined unless explicit boolean operators (AND, OR, NOT) are present.'),
-    page: z.number().optional().describe('Page number'),
-    ...dateFilterSchema,
+    title: 'Help Scout Conversation',
+    description: 'Detailed Help Scout conversation JSON, including capped threads.',
+    mimeType: 'application/json',
+  },
+  async (uri, variables) => {
+    const conversationId = parseTemplateNumber(variables.conversationId, 'conversationId');
+    const detail = await getConversationDetail(conversationId, true, DEFAULT_MAX_THREADS);
+    return buildJsonResource(uri.toString(), detail);
+  },
+);
+
+server.registerResource(
+  'customer-resource',
+  new ResourceTemplate('helpscout://customer/{customerId}', { list: undefined }),
+  {
+    title: 'Help Scout Customer',
+    description: 'Detailed Help Scout customer JSON.',
+    mimeType: 'application/json',
+  },
+  async (uri, variables) => {
+    const customerId = parseTemplateNumber(variables.customerId, 'customerId');
+    const customer = cleanCustomer(await client.getCustomer(customerId));
+    return buildJsonResource(uri.toString(), customer);
+  },
+);
+
+server.registerPrompt(
+  'summarize_ticket',
+  {
+    title: 'Summarize Ticket',
+    description: 'Generate an internal summary of a Help Scout conversation.',
+    argsSchema: {
+      conversationId: z.number().describe('Conversation ID to summarize'),
+      focus: z.string().optional().describe('Optional area to emphasize, such as billing, bugs, or customer sentiment'),
+      maxThreads: z.number().optional().default(DEFAULT_MAX_THREADS).describe('Maximum threads to include in the prompt context (default 20)'),
+    },
+  },
+  async ({ conversationId, focus, maxThreads }) => {
+    const detail = await getConversationDetail(conversationId, true, maxThreads);
+    const instructions = [
+      'Summarize this Help Scout conversation for an internal support teammate.',
+      focus
+        ? `Focus especially on: ${focus}.`
+        : 'Focus on the customer issue, the current status, unresolved questions, and the next recommended action.',
+      'Do not draft a reply to the customer.',
+      `Conversation resource URI: ${conversationResourceUri(conversationId)}`,
+      'Conversation JSON:',
+      JSON.stringify(detail, null, 2),
+    ].join('\n\n');
+
+    return {
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: instructions,
+          },
+        },
+      ],
+    };
+  },
+);
+
+server.registerPrompt(
+  'draft_reply',
+  {
+    title: 'Draft Reply',
+    description: 'Draft a customer-facing reply from a Help Scout conversation.',
+    argsSchema: {
+      conversationId: z.number().describe('Conversation ID to reply to'),
+      tone: z.string().optional().describe('Desired tone, such as concise, warm, direct, or apologetic'),
+      goal: z.string().optional().describe('Specific reply goal, such as resolving billing confusion or asking for a reproduction'),
+      maxThreads: z.number().optional().default(DEFAULT_MAX_THREADS).describe('Maximum threads to include in the prompt context (default 20)'),
+    },
+  },
+  async ({ conversationId, tone, goal, maxThreads }) => {
+    const detail = await getConversationDetail(conversationId, true, maxThreads);
+    const instructions = [
+      'Draft a Help Scout reply to the customer using the conversation data below.',
+      tone ? `Tone: ${tone}.` : 'Tone: clear, professional, and empathetic.',
+      goal
+        ? `Primary goal: ${goal}.`
+        : 'Primary goal: move the conversation toward a clear next step.',
+      'Do not claim the message has already been sent.',
+      `Conversation resource URI: ${conversationResourceUri(conversationId)}`,
+      'Conversation JSON:',
+      JSON.stringify(detail, null, 2),
+    ].join('\n\n');
+
+    return {
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: instructions,
+          },
+        },
+      ],
+    };
+  },
+);
+
+rememberTool('list_conversations', 'List conversations with optional filtering by status, mailbox, tag, assignee, or date range');
+server.registerTool(
+  'list_conversations',
+  {
+    title: 'List Conversations',
+    description: 'List conversations with optional filtering by status, mailbox, tag, assignee, or date range',
+    inputSchema: {
+      status: z
+        .enum(['active', 'pending', 'closed', 'spam', 'all'])
+        .optional()
+        .describe('Conversation status filter (defaults to "all" to include resolved tickets)'),
+      mailbox: z.string().optional().describe('Mailbox ID to filter by'),
+      tag: z.string().optional().describe('Tag to filter by'),
+      assignedTo: z.string().optional().describe('User ID assigned to'),
+      query: z.string().optional().describe('Search query. Multi-word queries are automatically AND-joined unless explicit boolean operators (AND, OR, NOT) are present.'),
+      page: z.number().optional().describe('Page number'),
+      ...dateFilterSchema,
+    },
+    outputSchema: listConversationsOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async ({ status = 'all', mailbox, tag, assignedTo, query, page, createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
     const normalizedQuery = normalizeSearchQuery(query);
     const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore }, normalizedQuery);
-    return jsonResponse(cleanForMcp(await client.listConversations({ status, mailbox, tag, assignedTo, query: dateQuery, page })));
-  }
-);
+    const result = await client.listConversations({ status, mailbox, tag, assignedTo, query: dateQuery, page });
 
-server.tool(
-  'get_conversation',
-  'Get detailed information about a specific conversation including threads. Threads are capped by maxThreads (default 20), keeping the original message and most recent threads.',
-  {
-    conversationId: z.number().describe('Conversation ID'),
-    includeThreads: z.boolean().optional().describe('Include conversation threads'),
-    maxThreads: z.number().optional().default(DEFAULT_MAX_THREADS).describe('Maximum threads to return (default 20). Keeps original message + most recent.'),
+    return structuredJsonResult({
+      conversations: normalizeConversations(result.conversations),
+      page: result.page,
+    });
   },
-  async ({ conversationId, includeThreads, maxThreads }) => {
-    const conversation = await client.getConversation(conversationId);
-    const cleaned = cleanForMcp(conversation);
-    if (includeThreads) {
-      const threads = await client.getConversationThreads(conversationId);
-      return jsonResponse({ ...(cleaned as Record<string, unknown>), ...capThreads(threads, maxThreads) });
-    }
-    return jsonResponse(cleaned);
-  }
 );
 
-server.tool(
-  'search_conversations',
-  'Search conversations matching a query. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. WARNING: Compound filters are unreliable — use one filter per call.',
+rememberTool('get_conversation', 'Get detailed information about a specific conversation. When includeThreads is true, the result includes capped threads as a separate array.');
+server.registerTool(
+  'get_conversation',
   {
-    query: z.string().optional().describe('Search query (e.g., "email:domain.com", "subject:billing"). Compound queries mixing a prefix filter with keywords are unreliable — make separate calls for each filter.'),
-    status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter (defaults to "all")'),
-    maxResults: z.number().optional().default(DEFAULT_MAX_RESULTS).describe('Maximum conversations to return (default 25). Use date filters to narrow large result sets.'),
-    ...dateFilterSchema,
+    title: 'Get Conversation',
+    description: 'Get detailed information about a specific conversation. When includeThreads is true, the result includes capped threads as a separate array.',
+    inputSchema: {
+      conversationId: z.number().describe('Conversation ID'),
+      includeThreads: z.boolean().optional().describe('Include conversation threads'),
+      maxThreads: z.number().optional().default(DEFAULT_MAX_THREADS).describe('Maximum threads to return (default 20). Keeps original message + most recent.'),
+    },
+    outputSchema: conversationDetailOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
+  async ({ conversationId, includeThreads = false, maxThreads }) => {
+    const detail = await getConversationDetail(conversationId, includeThreads, maxThreads);
+
+    return structuredJsonResult(detail, [
+      resourceLinkContent(
+        conversationResourceUri(conversationId),
+        `Conversation ${conversationId}`,
+        'Detailed Help Scout conversation resource',
+      ),
+    ]);
+  },
+);
+
+rememberTool('search_conversations', 'Search conversations matching a query. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. WARNING: Compound filters are unreliable — use one filter per call.');
+server.registerTool(
+  'search_conversations',
+  {
+    title: 'Search Conversations',
+    description: 'Search conversations matching a query. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. WARNING: Compound filters are unreliable — use one filter per call.',
+    inputSchema: {
+      query: z.string().optional().describe('Search query (e.g., "email:domain.com", "subject:billing"). Compound queries mixing a prefix filter with keywords are unreliable — make separate calls for each filter.'),
+      status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter (defaults to "all")'),
+      maxResults: z.number().optional().default(DEFAULT_MAX_RESULTS).describe('Maximum conversations to return (default 25). Use date filters to narrow large result sets.'),
+      ...dateFilterSchema,
+    },
+    outputSchema: searchConversationsOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async ({ query, status = 'all', maxResults, createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
     const normalizedQuery = normalizeSearchQuery(query);
     const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore }, normalizedQuery);
     const all = await client.listAllConversations({ query: dateQuery, status }, maxResults);
-    return jsonResponse(withOmissionMeta(all, maxResults));
-  }
+    return structuredJsonResult(withOmissionMeta(all, maxResults));
+  },
 );
 
-server.tool(
+rememberTool('get_conversations_summary', 'Get aggregated summary of conversations by status and tag. Fetches up to maxResults conversations (default 25) for summarization. Use date filters to scope the window.');
+server.registerTool(
   'get_conversations_summary',
-  'Get aggregated summary of conversations by status and tag. Fetches up to maxResults conversations (default 25) for summarization. Use date filters to scope the window.',
   {
-    status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter'),
-    mailbox: z.string().optional().describe('Mailbox ID to filter by'),
-    tag: z.string().optional().describe('Tag to filter by'),
-    maxResults: z.number().optional().default(DEFAULT_MAX_RESULTS).describe('Maximum conversations to summarize (default 25)'),
-    ...dateFilterSchema,
+    title: 'Summarize Conversations',
+    description: 'Get aggregated summary of conversations by status and tag. Fetches up to maxResults conversations (default 25) for summarization. Use date filters to scope the window.',
+    inputSchema: {
+      status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter'),
+      mailbox: z.string().optional().describe('Mailbox ID to filter by'),
+      tag: z.string().optional().describe('Tag to filter by'),
+      maxResults: z.number().optional().default(DEFAULT_MAX_RESULTS).describe('Maximum conversations to summarize (default 25)'),
+      ...dateFilterSchema,
+    },
+    outputSchema: conversationSummaryOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async ({ status, mailbox, tag, maxResults, createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
     const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore });
     const conversations = await client.listAllConversations({ status, mailbox, tag, query: dateQuery }, maxResults);
-    return jsonResponse(summarizeConversations(conversations));
-  }
+    return structuredJsonResult(summarizeConversations(conversations));
+  },
 );
 
-server.tool('list_mailboxes', 'List all mailboxes in the Help Scout account', {}, async () =>
-  jsonResponse(await client.listMailboxes())
+rememberTool('list_mailboxes', 'List all mailboxes in the Help Scout account');
+server.registerTool(
+  'list_mailboxes',
+  {
+    title: 'List Mailboxes',
+    description: 'List all mailboxes in the Help Scout account',
+    outputSchema: listMailboxesOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
+  async () => {
+    const result = await client.listMailboxes();
+    return structuredJsonResult({
+      mailboxes: result.mailboxes.map(cleanMailbox),
+      page: result.page,
+    });
+  },
 );
 
-server.tool(
+rememberTool('get_mailbox', 'Get detailed information about a specific mailbox');
+server.registerTool(
   'get_mailbox',
-  'Get detailed information about a specific mailbox',
-  { mailboxId: z.number().describe('Mailbox ID') },
-  async ({ mailboxId }) => jsonResponse(await client.getMailbox(mailboxId))
+  {
+    title: 'Get Mailbox',
+    description: 'Get detailed information about a specific mailbox',
+    inputSchema: {
+      mailboxId: z.number().describe('Mailbox ID'),
+    },
+    outputSchema: mailboxSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
+  async ({ mailboxId }) => structuredJsonResult(cleanMailbox(await client.getMailbox(mailboxId))),
 );
 
-server.tool(
+rememberTool('list_customers', 'List customers with optional filtering');
+server.registerTool(
   'list_customers',
-  'List customers with optional filtering',
   {
-    query: z.string().optional().describe('Search query'),
-    firstName: z.string().optional().describe('Filter by first name'),
-    lastName: z.string().optional().describe('Filter by last name'),
-    page: z.number().optional().describe('Page number'),
+    title: 'List Customers',
+    description: 'List customers with optional filtering',
+    inputSchema: {
+      query: z.string().optional().describe('Search query'),
+      firstName: z.string().optional().describe('Filter by first name'),
+      lastName: z.string().optional().describe('Filter by last name'),
+      page: z.number().optional().describe('Page number'),
+    },
+    outputSchema: listCustomersOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
-  async ({ query, firstName, lastName, page }) =>
-    jsonResponse(await client.listCustomers({ query, firstName, lastName, page }))
+  async ({ query, firstName, lastName, page }) => {
+    const result = await client.listCustomers({ query, firstName, lastName, page });
+    return structuredJsonResult({
+      customers: result.customers.map(cleanCustomer),
+      page: result.page,
+    });
+  },
 );
 
-server.tool(
+rememberTool('get_customer', 'Get detailed information about a specific customer');
+server.registerTool(
   'get_customer',
-  'Get detailed information about a specific customer',
-  { customerId: z.number().describe('Customer ID') },
-  async ({ customerId }) => jsonResponse(await client.getCustomer(customerId))
-);
-
-server.tool(
-  'list_tags',
-  'List all tags in the Help Scout account',
-  { page: z.number().optional().describe('Page number') },
-  async ({ page }) => jsonResponse(await client.listTags(page))
-);
-
-server.tool(
-  'list_workflows',
-  'List workflows with optional filtering',
   {
-    mailbox: z.number().optional().describe('Mailbox ID to filter by'),
-    type: z.enum(['automatic', 'manual']).optional().describe('Workflow type'),
-    page: z.number().optional().describe('Page number'),
+    title: 'Get Customer',
+    description: 'Get detailed information about a specific customer',
+    inputSchema: {
+      customerId: z.number().describe('Customer ID'),
+    },
+    outputSchema: customerSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
-  async ({ mailbox, type, page }) => jsonResponse(await client.listWorkflows({ mailbox, type, page }))
+  async ({ customerId }) => {
+    const customer = cleanCustomer(await client.getCustomer(customerId));
+
+    return structuredJsonResult(customer, [
+      resourceLinkContent(
+        customerResourceUri(customerId),
+        `Customer ${customerId}`,
+        'Detailed Help Scout customer resource',
+      ),
+    ]);
+  },
 );
 
-server.tool(
-  'create_note',
-  'Add a private note to a conversation',
+rememberTool('list_tags', 'List all tags in the Help Scout account');
+server.registerTool(
+  'list_tags',
   {
-    conversationId: z.number().describe('Conversation ID'),
-    text: z.string().describe('Note text content'),
+    title: 'List Tags',
+    description: 'List all tags in the Help Scout account',
+    inputSchema: {
+      page: z.number().optional().describe('Page number'),
+    },
+    outputSchema: listTagsOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
+  async ({ page }) => {
+    const result = await client.listTags(page);
+    return structuredJsonResult({
+      tags: result.tags.map(cleanTag),
+      page: result.page,
+    });
+  },
+);
+
+rememberTool('list_workflows', 'List workflows with optional filtering');
+server.registerTool(
+  'list_workflows',
+  {
+    title: 'List Workflows',
+    description: 'List workflows with optional filtering',
+    inputSchema: {
+      mailbox: z.number().optional().describe('Mailbox ID to filter by'),
+      type: z.enum(['automatic', 'manual']).optional().describe('Workflow type'),
+      page: z.number().optional().describe('Page number'),
+    },
+    outputSchema: listWorkflowsOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
+  async ({ mailbox, type, page }) => {
+    const result = await client.listWorkflows({ mailbox, type, page });
+    return structuredJsonResult({
+      workflows: result.workflows.map(cleanWorkflow),
+      page: result.page,
+    });
+  },
+);
+
+rememberTool('create_note', 'Add a private note to a conversation');
+server.registerTool(
+  'create_note',
+  {
+    title: 'Create Note',
+    description: 'Add a private note to a conversation',
+    inputSchema: {
+      conversationId: z.number().describe('Conversation ID'),
+      text: z.string().describe('Note text content'),
+    },
+    outputSchema: conversationActionOutputSchema,
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, text }) => {
     await client.createNote(conversationId, { text });
-    return jsonResponse({ success: true });
-  }
+    return structuredJsonResult({ success: true, conversationId });
+  },
 );
 
-server.tool(
+rememberTool('create_draft_reply', 'Create a draft reply on an existing conversation (saves without sending). Use this when responding to an existing ticket — the draft is reviewed and sent from the Help Scout UI. For starting a brand-new outbound conversation, use create_draft_conversation instead.');
+server.registerTool(
   'create_draft_reply',
-  'Create a draft reply on an existing conversation (saves without sending). Use this when responding to an existing ticket — the draft is reviewed and sent from the Help Scout UI. For starting a brand-new outbound conversation, use create_draft_conversation instead.',
   {
-    conversationId: z.number().describe('Existing conversation ID to attach the draft reply to'),
-    text: z.string().describe('Draft reply text content (HTML or plain text)'),
+    title: 'Create Draft Reply',
+    description: 'Create a draft reply on an existing conversation (saves without sending). Use this when responding to an existing ticket — the draft is reviewed and sent from the Help Scout UI. For starting a brand-new outbound conversation, use create_draft_conversation instead.',
+    inputSchema: {
+      conversationId: z.number().describe('Existing conversation ID to attach the draft reply to'),
+      text: z.string().describe('Draft reply text content (HTML or plain text)'),
+    },
+    outputSchema: conversationActionOutputSchema,
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, text }) => {
     await client.createDraftReply(conversationId, { text });
-    return jsonResponse({ success: true });
-  }
+    return structuredJsonResult({ success: true, conversationId });
+  },
 );
 
-server.tool(
+rememberTool('create_draft_conversation', 'Create a brand-new outbound draft conversation for proactive customer outreach (saves without sending). Use this when starting a new ticket from scratch — the draft is reviewed and sent from the Help Scout UI. For replying to an existing conversation, use create_draft_reply instead.');
+server.registerTool(
   'create_draft_conversation',
-  'Create a brand-new outbound draft conversation for proactive customer outreach (saves without sending). Use this when starting a new ticket from scratch — the draft is reviewed and sent from the Help Scout UI. For replying to an existing conversation, use create_draft_reply instead.',
   {
-    mailboxId: z.number().describe('Mailbox ID to create the conversation in'),
-    customerEmail: z.string().email().describe('Recipient customer email address'),
-    subject: z.string().describe('Conversation subject line'),
-    text: z.string().describe('Draft message body (HTML or plain text)'),
-    type: z.enum(['email', 'chat', 'phone']).optional().describe('Conversation medium (default "email")'),
-    status: z.enum(['active', 'pending', 'closed']).optional().describe('Conversation status (default "active")'),
-    tags: z.array(z.string()).optional().describe('Tags to apply to the conversation'),
+    title: 'Create Draft Conversation',
+    description: 'Create a brand-new outbound draft conversation for proactive customer outreach (saves without sending). Use this when starting a new ticket from scratch — the draft is reviewed and sent from the Help Scout UI. For replying to an existing conversation, use create_draft_reply instead.',
+    inputSchema: {
+      mailboxId: z.number().describe('Mailbox ID to create the conversation in'),
+      customerEmail: z.string().email().describe('Recipient customer email address'),
+      subject: z.string().describe('Conversation subject line'),
+      text: z.string().describe('Draft message body (HTML or plain text)'),
+      type: z.enum(['email', 'chat', 'phone']).optional().describe('Conversation medium (default "email")'),
+      status: z.enum(['active', 'pending', 'closed']).optional().describe('Conversation status (default "active")'),
+      tags: z.array(z.string()).optional().describe('Tags to apply to the conversation'),
+    },
+    outputSchema: draftConversationOutputSchema,
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ mailboxId, customerEmail, subject, text, type, status, tags }) => {
     const result = await client.createDraftConversation({
@@ -325,47 +933,65 @@ server.tool(
       status,
       tags,
     });
-    return jsonResponse({ success: true, conversationId: result.id });
-  }
+    return structuredJsonResult({ success: true, conversationId: result.id });
+  },
 );
 
-server.tool(
+rememberTool('update_conversation_status', 'Change the status of an existing conversation. Accepts active, open, pending, closed, or spam; open is normalized to active.');
+server.registerTool(
   'update_conversation_status',
-  'Change the status of an existing conversation. Accepts active, open, pending, closed, or spam; open is normalized to active.',
   {
-    conversationId: z.number().describe('Conversation ID'),
-    status: z
-      .enum(['active', 'open', 'pending', 'closed', 'spam'])
-      .describe('New conversation status. "open" is treated as "active".'),
+    title: 'Update Conversation Status',
+    description: 'Change the status of an existing conversation. Accepts active, open, pending, closed, or spam; open is normalized to active.',
+    inputSchema: {
+      conversationId: z.number().describe('Conversation ID'),
+      status: z
+        .enum(['active', 'open', 'pending', 'closed', 'spam'])
+        .describe('New conversation status. "open" is treated as "active".'),
+    },
+    outputSchema: conversationStatusOutputSchema,
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, status }) => {
     const normalizedStatus = normalizeConversationStatus(status);
     await client.updateConversationStatus(conversationId, normalizedStatus);
-    return jsonResponse({ success: true, status: normalizedStatus });
-  }
+    return structuredJsonResult({ success: true, conversationId, status: normalizedStatus });
+  },
 );
 
-server.tool(
+rememberTool('add_tag', 'Add a tag to a conversation');
+server.registerTool(
   'add_tag',
-  'Add a tag to a conversation',
   {
-    conversationId: z.number().describe('Conversation ID'),
-    tag: z.string().describe('Tag name to add'),
+    title: 'Add Tag',
+    description: 'Add a tag to a conversation',
+    inputSchema: {
+      conversationId: z.number().describe('Conversation ID'),
+      tag: z.string().describe('Tag name to add'),
+    },
+    outputSchema: taggedConversationOutputSchema,
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, tag }) => {
     await client.addConversationTag(conversationId, tag);
-    return jsonResponse({ success: true });
-  }
+    return structuredJsonResult({ success: true, conversationId, tag });
+  },
 );
 
-server.tool(
+rememberTool('search_by_customer', "Find conversations involving a customer by email. Searches primary email and domain (for CC'd/teammate tickets). Results deduplicated and capped by maxResults (default 25). Use date filters to narrow large result sets.");
+server.registerTool(
   'search_by_customer',
-  "Find conversations involving a customer by email. Searches primary email and domain (for CC'd/teammate tickets). Results deduplicated and capped by maxResults (default 25). Use date filters to narrow large result sets.",
   {
-    email: z.string().email().describe('Customer email address'),
-    status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter (defaults to "all")'),
-    maxResults: z.number().optional().default(DEFAULT_MAX_RESULTS).describe('Maximum conversations to return (default 25)'),
-    ...dateFilterSchema,
+    title: 'Search By Customer',
+    description: "Find conversations involving a customer by email. Searches primary email and domain (for CC'd/teammate tickets). Results deduplicated and capped by maxResults (default 25). Use date filters to narrow large result sets.",
+    inputSchema: {
+      email: z.string().email().describe('Customer email address'),
+      status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter (defaults to "all")'),
+      maxResults: z.number().optional().default(DEFAULT_MAX_RESULTS).describe('Maximum conversations to return (default 25)'),
+      ...dateFilterSchema,
+    },
+    outputSchema: searchByCustomerOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async ({ email, status = 'all', maxResults, createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
     const domain = email.split('@')[1];
@@ -391,6 +1017,7 @@ server.tool(
       seen.add(conv.id);
       all.push(conv);
     }
+
     for (const conv of domainResults) {
       if (!seen.has(conv.id)) {
         seen.add(conv.id);
@@ -398,7 +1025,7 @@ server.tool(
       }
     }
 
-    return jsonResponse({
+    return structuredJsonResult({
       ...withOmissionMeta(all, maxResults),
       meta: {
         email,
@@ -409,28 +1036,41 @@ server.tool(
         totalAfterDedup: all.length,
       },
     });
-  }
+  },
 );
 
-server.tool('check_auth', 'Check if Help Scout authentication is configured', {}, async () =>
-  jsonResponse({ authenticated: await auth.isAuthenticated() })
-);
-
-server.tool(
-  'search_tools',
-  'Search for available tools by name or description using regex. Returns matching tool names.',
+rememberTool('check_auth', 'Check if Help Scout authentication is configured');
+server.registerTool(
+  'check_auth',
   {
-    query: z.string().describe('Regex pattern to match against tool names and descriptions (case-insensitive)'),
+    title: 'Check Authentication',
+    description: 'Check if Help Scout authentication is configured',
+    outputSchema: authStatusOutputSchema,
+    annotations: READ_ONLY_LOCAL_ANNOTATIONS,
+  },
+  async () => structuredJsonResult({ authenticated: await auth.isAuthenticated() }),
+);
+
+rememberTool('search_tools', 'Search for available tools by name or description using regex. Returns matching tool names.');
+server.registerTool(
+  'search_tools',
+  {
+    title: 'Search Tools',
+    description: 'Search for available tools by name or description using regex. Returns matching tool names.',
+    inputSchema: {
+      query: z.string().describe('Regex pattern to match against tool names and descriptions (case-insensitive)'),
+    },
+    annotations: READ_ONLY_LOCAL_ANNOTATIONS,
   },
   async ({ query }) => {
     try {
       const pattern = new RegExp(query, 'i');
-      const matches = toolRegistry.filter((t) => pattern.test(t.name) || pattern.test(t.description));
-      return jsonResponse({ tools: matches });
+      const matches = toolRegistry.filter((tool) => pattern.test(tool.name) || pattern.test(tool.description));
+      return textJsonResult({ tools: matches });
     } catch {
-      return jsonResponse({ error: 'Invalid regex pattern' });
+      return textJsonResult({ error: 'Invalid regex pattern' }, true);
     }
-  }
+  },
 );
 
 export async function runMcpServer() {

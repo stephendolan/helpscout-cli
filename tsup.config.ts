@@ -15,5 +15,6 @@ export default defineConfig({
   minify: false,
   define: {
     __VERSION__: JSON.stringify(packageJson.version),
+    __HOMEPAGE__: JSON.stringify(packageJson.homepage ?? ''),
   },
 });

@@ -90,6 +90,14 @@ Run as an MCP server for AI agent integration:
 helpscout mcp
 ```
 
+The MCP server exposes:
+
+- Typed tools for Help Scout search, mailbox/customer lookup, and safe draft-note mutations
+- Resource templates for `helpscout://conversation/{conversationId}` and `helpscout://customer/{customerId}`
+- Prompt templates for `summarize_ticket` and `draft_reply`
+
+Read-only tools include MCP annotations so hosts can distinguish them from mutating tools, and core read/query tools return structured outputs alongside readable JSON text.
+
 ## Options
 
 | Flag | Description |
