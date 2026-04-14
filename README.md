@@ -44,6 +44,7 @@ helpscout conversations threads 456
 helpscout conversations threads 456 --type customer  # Filter by type
 helpscout conversations threads 456 --html          # HTML output
 helpscout conversations threads 456 --include-notes
+helpscout conversations status 456 closed
 helpscout conversations reply 456 --text "Thanks for reaching out!"
 helpscout conversations note 456 --text "Internal note"
 helpscout conversations add-tag 456 urgent

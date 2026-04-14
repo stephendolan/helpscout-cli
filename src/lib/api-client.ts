@@ -2,7 +2,9 @@ import { auth } from './auth.js';
 import { HelpScoutCliError, HelpScoutApiError } from './errors.js';
 import type {
   Conversation,
+  ConversationStatus,
   Customer,
+  DraftConversationStatus,
   Tag,
   Workflow,
   Mailbox,
@@ -274,6 +276,10 @@ export class HelpScoutClient {
     await this.request<void>('PATCH', `/conversations/${conversationId}`, { body: data });
   }
 
+  async updateConversationStatus(conversationId: number, status: ConversationStatus) {
+    await this.updateConversation(conversationId, { op: 'replace', path: '/status', value: status });
+  }
+
   async deleteConversation(conversationId: number) {
     await this.request<void>('DELETE', `/conversations/${conversationId}`);
   }
@@ -311,7 +317,7 @@ export class HelpScoutClient {
     customerEmail: string;
     text: string;
     type?: 'email' | 'chat' | 'phone';
-    status?: 'active' | 'pending' | 'closed';
+    status?: DraftConversationStatus;
     user?: number;
     tags?: string[];
   }): Promise<{ id: number }> {

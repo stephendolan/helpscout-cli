@@ -22,13 +22,16 @@ export interface PageInfo {
   number: number;
 }
 
+export type ConversationStatus = 'active' | 'pending' | 'closed' | 'spam';
+export type DraftConversationStatus = Exclude<ConversationStatus, 'spam'>;
+
 export interface Conversation {
   id: number;
   number: number;
   threads: number;
   type: string;
   folderId: number;
-  status: string;
+  status: ConversationStatus;
   state: string;
   subject: string;
   preview: string;

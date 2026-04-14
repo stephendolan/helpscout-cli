@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { client } from '../lib/api-client.js';
 import { auth } from '../lib/auth.js';
+import { normalizeConversationStatus } from '../lib/conversation-status.js';
 import { buildDateQuery } from '../lib/dates.js';
 import { normalizeSearchQuery } from '../lib/search.js';
 import type { Conversation, Thread } from '../types/index.js';
@@ -92,6 +93,7 @@ const toolRegistry = [
   { name: 'create_note', description: 'Add a private note to an existing conversation' },
   { name: 'create_draft_reply', description: 'Create a draft reply on an existing conversation (saves without sending). Use when responding to a ticket.' },
   { name: 'create_draft_conversation', description: 'Create a brand-new outbound draft conversation for proactive customer outreach (saves without sending). Use when starting a new ticket from scratch.' },
+  { name: 'update_conversation_status', description: 'Change the status of an existing conversation' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
 ];
@@ -324,6 +326,22 @@ server.tool(
       tags,
     });
     return jsonResponse({ success: true, conversationId: result.id });
+  }
+);
+
+server.tool(
+  'update_conversation_status',
+  'Change the status of an existing conversation. Accepts active, open, pending, closed, or spam; open is normalized to active.',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+    status: z
+      .enum(['active', 'open', 'pending', 'closed', 'spam'])
+      .describe('New conversation status. "open" is treated as "active".'),
+  },
+  async ({ conversationId, status }) => {
+    const normalizedStatus = normalizeConversationStatus(status);
+    await client.updateConversationStatus(conversationId, normalizedStatus);
+    return jsonResponse({ success: true, status: normalizedStatus });
   }
 );
 

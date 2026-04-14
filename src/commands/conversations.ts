@@ -3,7 +3,8 @@ import { client } from '../lib/api-client.js';
 import { outputJson, htmlToPlainText, buildName } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
 import { buildDateQuery } from '../lib/dates.js';
-import type { Conversation, Thread } from '../types/index.js';
+import { normalizeConversationStatus } from '../lib/conversation-status.js';
+import type { Conversation, DraftConversationStatus, Thread } from '../types/index.js';
 
 interface ParticipantInfo {
   name?: string;
@@ -261,6 +262,19 @@ export function createConversationsCommand(): Command {
     );
 
   cmd
+    .command('status')
+    .description('Update a conversation status')
+    .argument('<id>', 'Conversation ID')
+    .argument('<status>', 'New status (active, open, pending, closed, spam)')
+    .action(
+      withErrorHandling(async (id: string, status: string) => {
+        const normalizedStatus = normalizeConversationStatus(status);
+        await client.updateConversationStatus(parseIdArg(id, 'conversation'), normalizedStatus);
+        outputJson({ message: 'Conversation status updated', status: normalizedStatus });
+      })
+    );
+
+  cmd
     .command('add-tag')
     .description('Add a tag to a conversation')
     .argument('<id>', 'Conversation ID')
@@ -328,7 +342,7 @@ export function createConversationsCommand(): Command {
           text: string;
           user?: string;
           type?: 'email' | 'chat' | 'phone';
-          status?: 'active' | 'pending' | 'closed';
+          status?: DraftConversationStatus;
           tag?: string[];
         }) => {
           const result = await client.createDraftConversation({
