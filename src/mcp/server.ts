@@ -238,8 +238,10 @@ const sourceSchema = z.object({
 
 const tagSchema = z.object({
   id: z.number().optional(),
-  name: z.string(),
-  slug: z.string(),
+  name: z.string().optional(),
+  slug: z.string().optional(),
+  tag: z.string().optional(),
+  color: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
   ticketCount: z.number().optional(),
@@ -483,7 +485,8 @@ function summarizeConversations(conversations: Conversation[]): ConversationSumm
   for (const conv of conversations) {
     byStatus[conv.status] = (byStatus[conv.status] || 0) + 1;
     for (const tag of conv.tags || []) {
-      byTag[tag.name] = (byTag[tag.name] || 0) + 1;
+      const label = tag.name ?? (tag as { tag?: string }).tag ?? 'unknown';
+      byTag[label] = (byTag[label] || 0) + 1;
     }
   }
 
