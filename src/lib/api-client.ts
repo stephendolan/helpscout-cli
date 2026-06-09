@@ -358,6 +358,7 @@ export class HelpScoutClient {
     data: {
       text: string;
       user?: number;
+      status?: ConversationStatus;
     }
   ) {
     await this.request<void>('POST', `/conversations/${conversationId}/notes`, { body: data });

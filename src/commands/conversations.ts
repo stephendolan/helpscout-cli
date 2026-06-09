@@ -366,6 +366,7 @@ export function createConversationsCommand(): Command {
     .argument('<id>', 'Conversation ID')
     .requiredOption('--text <text>', 'Note text')
     .option('--user <id>', 'User ID adding the note')
+    .option('--status <status>', 'Set conversation status after adding the note (active, open, pending, closed, spam)')
     .action(
       withErrorHandling(
         async (
@@ -373,13 +374,21 @@ export function createConversationsCommand(): Command {
           options: {
             text: string;
             user?: string;
+            status?: string;
           }
         ) => {
+          const status = options.status
+            ? normalizeConversationStatus(options.status)
+            : undefined;
           await client.createNote(parseIdArg(id, 'conversation'), {
             text: options.text,
             user: options.user ? parseIdArg(options.user, 'user') : undefined,
+            status,
           });
-          outputJson({ message: 'Note added' });
+          outputJson({
+            message: 'Note added',
+            ...(status && { status }),
+          });
         }
       )
     );

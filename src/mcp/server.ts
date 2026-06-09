@@ -442,6 +442,10 @@ const conversationStatusOutputSchema = conversationActionOutputSchema.extend({
   status: z.enum(['active', 'pending', 'closed', 'spam']),
 });
 
+const noteOutputSchema = conversationActionOutputSchema.extend({
+  status: z.enum(['active', 'pending', 'closed', 'spam']).optional(),
+});
+
 const taggedConversationOutputSchema = conversationActionOutputSchema.extend({
   tag: z.string(),
 });
@@ -879,13 +883,22 @@ server.registerTool(
     inputSchema: {
       conversationId: z.number().describe('Conversation ID'),
       text: z.string().describe('Note text content'),
+      status: z
+        .string()
+        .optional()
+        .describe('Optionally set the conversation status after adding the note (active, open, pending, closed, spam)'),
     },
-    outputSchema: conversationActionOutputSchema,
+    outputSchema: noteOutputSchema,
     annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
-  async ({ conversationId, text }) => {
-    await client.createNote(conversationId, { text });
-    return structuredJsonResult({ success: true, conversationId });
+  async ({ conversationId, text, status }) => {
+    const normalizedStatus = status ? normalizeConversationStatus(status) : undefined;
+    await client.createNote(conversationId, { text, status: normalizedStatus });
+    return structuredJsonResult({
+      success: true,
+      conversationId,
+      ...(normalizedStatus && { status: normalizedStatus }),
+    });
   },
 );
 
