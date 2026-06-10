@@ -12,6 +12,7 @@ import type {
   Mailbox,
   Tag,
   Thread,
+  User,
   Workflow,
 } from '../types/index.js';
 
@@ -98,6 +99,10 @@ function cleanMailbox(mailbox: Mailbox) {
 
 function cleanTag(tag: Tag) {
   return asRecord(cleanForMcp(tag));
+}
+
+function cleanUser(user: User) {
+  return asRecord(cleanForMcp(user));
 }
 
 function cleanWorkflow(workflow: Workflow) {
@@ -215,6 +220,10 @@ function conversationResourceUri(conversationId: number) {
 
 function customerResourceUri(customerId: number) {
   return `helpscout://customer/${customerId}`;
+}
+
+function userResourceUri(userId: number) {
+  return `helpscout://user/${userId}`;
 }
 
 const pageInfoSchema = z.object({
@@ -354,6 +363,23 @@ const customerSchema = z.object({
   }).passthrough()).optional(),
 }).passthrough();
 
+const userSchema = z.object({
+  id: z.number(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  email: z.string().optional(),
+  role: z.string().optional(),
+  timezone: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  type: z.string().optional(),
+  mention: z.string().optional(),
+  initials: z.string().optional(),
+  jobTitle: z.string().optional(),
+  phone: z.string().optional(),
+  alternateEmails: z.array(z.string()).optional(),
+}).passthrough();
+
 const mailboxSchema = z.object({
   id: z.number(),
   name: z.string(),
@@ -427,6 +453,11 @@ const listMailboxesOutputSchema = z.object({
 
 const listCustomersOutputSchema = z.object({
   customers: z.array(customerSchema),
+  page: pageInfoSchema,
+});
+
+const listUsersOutputSchema = z.object({
+  users: z.array(userSchema),
   page: pageInfoSchema,
 });
 
@@ -572,6 +603,21 @@ server.registerResource(
     const customerId = parseTemplateNumber(variables.customerId, 'customerId');
     const customer = cleanCustomer(await client.getCustomer(customerId));
     return buildJsonResource(uri.toString(), customer);
+  },
+);
+
+server.registerResource(
+  'user-resource',
+  new ResourceTemplate('helpscout://user/{userId}', { list: undefined }),
+  {
+    title: 'Help Scout User',
+    description: 'Detailed Help Scout user JSON, including mention handle when available.',
+    mimeType: 'application/json',
+  },
+  async (uri, variables) => {
+    const userId = parseTemplateNumber(variables.userId, 'userId');
+    const user = cleanUser(await client.getUser(userId));
+    return buildJsonResource(uri.toString(), user);
   },
 );
 
@@ -837,6 +883,54 @@ server.registerTool(
         customerResourceUri(customerId),
         `Customer ${customerId}`,
         'Detailed Help Scout customer resource',
+      ),
+    ]);
+  },
+);
+
+rememberTool('list_users', 'List Help Scout users and mention handles with optional exact email, mailbox, and page filters');
+server.registerTool(
+  'list_users',
+  {
+    title: 'List Users',
+    description: 'List Help Scout users and mention handles with optional exact email, mailbox, and page filters',
+    inputSchema: {
+      email: z.string().email().optional().describe('Exact-match email filter'),
+      mailbox: z.number().optional().describe('Mailbox ID to filter by'),
+      page: z.number().optional().describe('Page number'),
+    },
+    outputSchema: listUsersOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
+  async ({ email, mailbox, page }) => {
+    const result = await client.listUsers({ email, mailbox, page });
+    return structuredJsonResult({
+      users: result.users.map(cleanUser),
+      page: result.page,
+    });
+  },
+);
+
+rememberTool('get_user', 'Get detailed information about a specific Help Scout user, including the mention handle for @mentions');
+server.registerTool(
+  'get_user',
+  {
+    title: 'Get User',
+    description: 'Get detailed information about a specific Help Scout user, including the mention handle for @mentions',
+    inputSchema: {
+      userId: z.number().describe('User ID'),
+    },
+    outputSchema: userSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
+  async ({ userId }) => {
+    const user = cleanUser(await client.getUser(userId));
+
+    return structuredJsonResult(user, [
+      resourceLinkContent(
+        userResourceUri(userId),
+        `User ${userId}`,
+        'Detailed Help Scout user resource',
       ),
     ]);
   },

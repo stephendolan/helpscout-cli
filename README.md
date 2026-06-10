@@ -63,6 +63,17 @@ helpscout customers update 789 --organization "Acme Corp"
 helpscout customers delete 789
 ```
 
+### Users
+
+```bash
+helpscout users list
+helpscout users list --email user@example.com
+helpscout users list --mailbox 123 --page 2
+helpscout users view 456
+```
+
+User responses include the `mention` handle when Help Scout returns one. Use `@mention` in Help Scout thread bodies to mention teammates.
+
 ### Tags, Workflows, Mailboxes
 
 ```bash
@@ -92,8 +103,9 @@ helpscout mcp
 
 The MCP server exposes:
 
-- Typed tools for Help Scout search, mailbox/customer lookup, and safe draft-note mutations
-- Resource templates for `helpscout://conversation/{conversationId}` and `helpscout://customer/{customerId}`
+- Typed tools for Help Scout search, mailbox/customer/user lookup, and safe draft-note mutations
+- User lookup tools expose Help Scout mention handles for composing `@mention` references
+- Resource templates for `helpscout://conversation/{conversationId}`, `helpscout://customer/{customerId}`, and `helpscout://user/{userId}`
 - Prompt templates for `summarize_ticket` and `draft_reply`
 
 Read-only tools include MCP annotations so hosts can distinguish them from mutating tools, and core read/query tools return structured outputs alongside readable JSON text.

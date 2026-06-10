@@ -175,6 +175,24 @@ export interface CustomerAddress {
   lines?: string[];
 }
 
+export interface User {
+  id: number;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  role?: string;
+  timezone?: string;
+  photoUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  type?: string;
+  mention?: string;
+  initials?: string;
+  jobTitle?: string;
+  phone?: string;
+  alternateEmails?: string[];
+}
+
 export interface Tag {
   id: number;
   name: string;

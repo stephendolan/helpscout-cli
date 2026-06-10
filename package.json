@@ -1,6 +1,6 @@
 {
   "name": "@stephendolan/helpscout-cli",
-  "version": "2.14.1",
+  "version": "2.15.0",
   "description": "A command-line interface for Help Scout",
   "type": "module",
   "main": "./dist/cli.js",

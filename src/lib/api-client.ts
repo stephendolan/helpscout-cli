@@ -6,6 +6,7 @@ import type {
   Customer,
   DraftConversationStatus,
   Tag,
+  User,
   Workflow,
   Mailbox,
   Thread,
@@ -452,6 +453,27 @@ export class HelpScoutClient {
 
   async deleteCustomer(customerId: number) {
     await this.request<void>('DELETE', `/customers/${customerId}`);
+  }
+
+  // Users
+  async listUsers(
+    params: {
+      email?: string;
+      mailbox?: number;
+      page?: number;
+    } = {}
+  ) {
+    const response = await this.request<PaginatedResponse<{ users: User[] }>>('GET', '/users', {
+      params,
+    });
+    return {
+      users: response._embedded?.users || [],
+      page: response.page,
+    };
+  }
+
+  async getUser(userId: number) {
+    return this.request<User>('GET', `/users/${userId}`);
   }
 
   // Tags
