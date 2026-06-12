@@ -13,20 +13,14 @@ export function createUsersCommand(): Command {
     .option('-m, --mailbox <id>', 'Filter by mailbox ID')
     .option('--page <number>', 'Page number')
     .action(
-      withErrorHandling(
-        async (options: {
-          email?: string;
-          mailbox?: string;
-          page?: string;
-        }) => {
-          const result = await client.listUsers({
-            email: options.email,
-            mailbox: options.mailbox ? parseIdArg(options.mailbox, 'mailbox') : undefined,
-            page: options.page ? parseInt(options.page, 10) : undefined,
-          });
-          outputJson(result);
-        }
-      )
+      withErrorHandling(async (options: { email?: string; mailbox?: string; page?: string }) => {
+        const result = await client.listUsers({
+          email: options.email,
+          mailbox: options.mailbox ? parseIdArg(options.mailbox, 'mailbox') : undefined,
+          page: options.page ? parseInt(options.page, 10) : undefined,
+        });
+        outputJson(result);
+      })
     );
 
   cmd

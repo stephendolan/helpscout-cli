@@ -29,9 +29,6 @@ export function requireAtLeastOneField(data: Record<string, unknown>, operation:
 
 export function requireConfirmation(itemType: string, confirmed: boolean = false): void {
   if (!confirmed) {
-    throw new HelpScoutCliError(
-      `Deleting ${itemType} requires --yes flag to confirm`,
-      400
-    );
+    throw new HelpScoutCliError(`Deleting ${itemType} requires --yes flag to confirm`, 400);
   }
 }

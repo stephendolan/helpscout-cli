@@ -25,9 +25,7 @@ describe('normalizeSearchQuery', () => {
   });
 
   it('should pass through mixed explicit operators', () => {
-    expect(normalizeSearchQuery('audio AND latency OR video')).toBe(
-      'audio AND latency OR video'
-    );
+    expect(normalizeSearchQuery('audio AND latency OR video')).toBe('audio AND latency OR video');
   });
 
   it('should not transform a single token', () => {

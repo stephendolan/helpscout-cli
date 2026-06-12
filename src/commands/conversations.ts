@@ -203,7 +203,10 @@ export function createConversationsCommand(): Command {
     .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
     .action(
       withErrorHandling(async (id: string) => {
-        const conversation = await client.getConversation(await client.resolveConversationId(id), 'threads');
+        const conversation = await client.getConversation(
+          await client.resolveConversationId(id),
+          'threads'
+        );
         const threadInfo = extractThreadInfo(conversation._embedded?.threads);
         const result = {
           ...conversation,
@@ -269,7 +272,10 @@ export function createConversationsCommand(): Command {
     .action(
       withErrorHandling(async (id: string, status: string) => {
         const normalizedStatus = normalizeConversationStatus(status);
-        await client.updateConversationStatus(await client.resolveConversationId(id), normalizedStatus);
+        await client.updateConversationStatus(
+          await client.resolveConversationId(id),
+          normalizedStatus
+        );
         outputJson({ message: 'Conversation status updated', status: normalizedStatus });
       })
     );
@@ -300,7 +306,9 @@ export function createConversationsCommand(): Command {
 
   cmd
     .command('draft-reply')
-    .description('Create a draft reply on an existing conversation (never sends — review and send from the Help Scout UI)')
+    .description(
+      'Create a draft reply on an existing conversation (never sends — review and send from the Help Scout UI)'
+    )
     .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
     .requiredOption('--text <text>', 'Reply text')
     .option('--user <id>', 'User ID authoring the draft')
@@ -324,7 +332,9 @@ export function createConversationsCommand(): Command {
 
   cmd
     .command('draft-conversation')
-    .description('Create a new outbound draft conversation (never sends — review and send from the Help Scout UI)')
+    .description(
+      'Create a new outbound draft conversation (never sends — review and send from the Help Scout UI)'
+    )
     .requiredOption('--mailbox <id>', 'Mailbox ID to create the conversation in')
     .requiredOption('--customer-email <email>', 'Recipient customer email address')
     .requiredOption('--subject <subject>', 'Conversation subject')
@@ -366,7 +376,10 @@ export function createConversationsCommand(): Command {
     .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
     .requiredOption('--text <text>', 'Note text')
     .option('--user <id>', 'User ID adding the note')
-    .option('--status <status>', 'Set conversation status after adding the note (active, open, pending, closed, spam)')
+    .option(
+      '--status <status>',
+      'Set conversation status after adding the note (active, open, pending, closed, spam)'
+    )
     .action(
       withErrorHandling(
         async (
@@ -377,9 +390,7 @@ export function createConversationsCommand(): Command {
             status?: string;
           }
         ) => {
-          const status = options.status
-            ? normalizeConversationStatus(options.status)
-            : undefined;
+          const status = options.status ? normalizeConversationStatus(options.status) : undefined;
           await client.createNote(await client.resolveConversationId(id), {
             text: options.text,
             user: options.user ? parseIdArg(options.user, 'user') : undefined,

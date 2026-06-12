@@ -13,20 +13,14 @@ export function createWorkflowsCommand(): Command {
     .option('-t, --type <type>', 'Filter by type (manual, automatic)')
     .option('--page <number>', 'Page number')
     .action(
-      withErrorHandling(
-        async (options: {
-          mailbox?: string;
-          type?: string;
-          page?: string;
-        }) => {
-          const result = await client.listWorkflows({
-            mailbox: options.mailbox ? parseIdArg(options.mailbox, 'mailbox') : undefined,
-            type: options.type,
-            page: options.page ? parseInt(options.page, 10) : undefined,
-          });
-          outputJson(result);
-        }
-      )
+      withErrorHandling(async (options: { mailbox?: string; type?: string; page?: string }) => {
+        const result = await client.listWorkflows({
+          mailbox: options.mailbox ? parseIdArg(options.mailbox, 'mailbox') : undefined,
+          type: options.type,
+          page: options.page ? parseInt(options.page, 10) : undefined,
+        });
+        outputJson(result);
+      })
     );
 
   cmd
