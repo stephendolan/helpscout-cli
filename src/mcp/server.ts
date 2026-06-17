@@ -1,6 +1,6 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
+import * as z from 'zod/v4';
 import { client } from '../lib/api-client.js';
 import { auth } from '../lib/auth.js';
 import { normalizeConversationStatus } from '../lib/conversation-status.js';
