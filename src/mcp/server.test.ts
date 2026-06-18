@@ -28,4 +28,24 @@ describe('Help Scout MCP server helpers', () => {
       ])
     );
   });
+
+  // Help Scout system-action threads (assigned/moved/merged) carry
+  // action.associatedEntities. The action sub-object must stay passthrough so
+  // its closed JSON output schema doesn't reject real payloads downstream.
+  it('preserves unknown action fields on threads instead of rejecting them', () => {
+    const thread = {
+      id: 1,
+      type: 'lineitem',
+      createdAt: '2026-01-01T00:00:00Z',
+      action: {
+        type: 'movedFromMailbox',
+        text: 'Moved from Sales',
+        associatedEntities: { mailboxIds: [42] },
+      },
+    };
+
+    const parsed = mcpServer.getThreadSchemaForTesting().parse(thread);
+
+    expect(parsed.action?.associatedEntities).toEqual({ mailboxIds: [42] });
+  });
 });
