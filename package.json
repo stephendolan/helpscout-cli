@@ -50,7 +50,7 @@
     "conf": "^15.0.2",
     "dayjs": "^1.11.19",
     "html-to-text": "^10.0.0",
-    "zod": "^4.4.3"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.11",
