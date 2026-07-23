@@ -380,8 +380,15 @@ export class HelpScoutClient {
       user?: number;
     }
   ) {
+    const conversation = await this.getConversation(conversationId);
+    const customerId = conversation?.primaryCustomer?.id;
+    if (!customerId) {
+      throw new Error(
+        `Cannot create draft reply: conversation ${conversationId} has no primary customer`
+      );
+    }
     await this.request<void>('POST', `/conversations/${conversationId}/reply`, {
-      body: { ...data, draft: true },
+      body: { ...data, customer: { id: customerId }, draft: true },
     });
   }
 
