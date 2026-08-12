@@ -10,7 +10,23 @@ function thread(id: number, type = 'customer') {
   };
 }
 
-function paginatedThreads(threads: ReturnType<typeof thread>[], page: number, totalPages: number) {
+function draftThread(id: number, body = `<p>Draft ${id}</p>`) {
+  return {
+    id,
+    type: 'message',
+    status: 'active',
+    state: 'draft',
+    body,
+    createdAt: `2026-06-0${id}T00:00:00Z`,
+    createdBy: { id: 42, type: 'user', first: 'Ada', last: 'Lovelace' },
+  };
+}
+
+function paginatedThreads(
+  threads: Array<Record<string, unknown>>,
+  page: number,
+  totalPages: number
+) {
   return Response.json({
     _embedded: { threads },
     page: {
@@ -148,12 +164,20 @@ describe('HelpScoutClient', () => {
     );
   });
 
-  it('includes the primary customer when creating a draft reply', async () => {
+  it('creates a draft reply, parses Resource-ID, and verifies the live thread', async () => {
     fetchMock
       .mockResolvedValueOnce(Response.json({ primaryCustomer: { id: 729732479 } }))
-      .mockResolvedValueOnce(new Response(null, { status: 201 }));
+      .mockResolvedValueOnce(
+        new Response(null, { status: 201, headers: { 'Resource-ID': '10420000001' } })
+      )
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(10420000001, '<p>Draft reply</p>')], 1, 1)
+      );
 
-    await client.createDraftReply(3401014297, { text: '<p>Draft reply</p>', user: 903917 });
+    const result = await client.createDraftReply(3401014297, {
+      text: '<p>Draft reply</p>',
+      user: 903917,
+    });
 
     expect(fetchMock.mock.calls[0][0]).toBe(
       'https://api.helpscout.net/v2/conversations/3401014297'
@@ -170,6 +194,151 @@ describe('HelpScoutClient', () => {
         }),
       }),
     ]);
+    expect(result).toEqual(
+      expect.objectContaining({
+        conversationId: 3401014297,
+        threadId: 10420000001,
+        action: 'created',
+        verified: true,
+      })
+    );
+  });
+
+  it('fails creation when Help Scout omits the Resource-ID header', async () => {
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ primaryCustomer: { id: 729732479 } }))
+      .mockResolvedValueOnce(new Response(null, { status: 201 }));
+
+    await expect(client.createDraftReply(123, { text: 'Draft' })).rejects.toThrow(
+      'did not return a valid Resource-ID'
+    );
+  });
+
+  it('lists only active draft reply threads with safe selection metadata', async () => {
+    const longBody = 'x'.repeat(350);
+    fetchMock.mockResolvedValueOnce(
+      paginatedThreads(
+        [
+          draftThread(11, longBody),
+          { ...thread(12, 'message'), state: 'published' },
+          thread(13, 'note'),
+        ],
+        1,
+        1
+      )
+    );
+
+    const drafts = await client.listDraftReplies(123);
+
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toEqual(
+      expect.objectContaining({
+        conversationId: 123,
+        threadId: 11,
+        state: 'draft',
+        body: longBody,
+        preview: `${'x'.repeat(300)}...`,
+        createdBy: expect.objectContaining({ id: 42 }),
+      })
+    );
+  });
+
+  it('updates a specific draft with JSON Patch and verifies the result', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'New')], 1, 1));
+
+    const result = await client.updateDraftReply(123, 11, 'New');
+
+    expect(fetchMock.mock.calls[1]).toEqual([
+      'https://api.helpscout.net/v2/conversations/123/threads/11',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ op: 'replace', path: '/text', value: 'New' }),
+      }),
+    ]);
+    expect(result).toEqual(
+      expect.objectContaining({ threadId: 11, action: 'updated', verified: true })
+    );
+  });
+
+  it('refuses to update a published or non-draft thread', async () => {
+    fetchMock.mockResolvedValueOnce(
+      paginatedThreads([{ ...thread(11, 'message'), state: 'published' }], 1, 1)
+    );
+
+    await expect(client.updateDraftReply(123, 11, 'New')).rejects.toThrow('expected a draft reply');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses an unknown thread ID before writing', async () => {
+    fetchMock.mockResolvedValueOnce(paginatedThreads([draftThread(11)], 1, 1));
+
+    await expect(client.updateDraftReply(123, 99, 'New')).rejects.toThrow('does not exist');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates on upsert when no active draft exists', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([], 1, 1))
+      .mockResolvedValueOnce(Response.json({ primaryCustomer: { id: 7 } }))
+      .mockResolvedValueOnce(new Response(null, { status: 201, headers: { 'Resource-ID': '22' } }))
+      .mockResolvedValueOnce(paginatedThreads([draftThread(22, 'Desired')], 1, 1));
+
+    const result = await client.upsertDraftReply(123, { text: 'Desired' });
+
+    expect(result.action).toBe('created');
+    expect(result.threadId).toBe(22);
+  });
+
+  it('updates the sole active draft on upsert', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Desired')], 1, 1));
+
+    const result = await client.upsertDraftReply(123, { text: 'Desired' });
+
+    expect(result.action).toBe('updated');
+    expect(result.threadId).toBe(11);
+  });
+
+  it('refuses ambiguous upsert when multiple active drafts exist', async () => {
+    fetchMock.mockResolvedValueOnce(paginatedThreads([draftThread(11), draftThread(12)], 1, 1));
+
+    await expect(client.upsertDraftReply(123, { text: 'Desired' })).rejects.toThrow(
+      'Refusing to choose among 2 active draft replies (11, 12)'
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses an explicit thread ID to disambiguate upsert', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, 'First'), draftThread(12, 'Second')], 1, 1)
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, 'First'), draftThread(12, 'Desired')], 1, 1)
+      );
+
+    const result = await client.upsertDraftReply(123, { text: 'Desired', threadId: 12 });
+
+    expect(result.threadId).toBe(12);
+    expect(result.action).toBe('updated');
+  });
+
+  it('reports post-write verification failures without claiming success', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1));
+
+    await expect(client.updateDraftReply(123, 11, 'Desired')).rejects.toThrow(
+      'post-write verification failed'
+    );
   });
 
   it('sends private notes with optional status', async () => {

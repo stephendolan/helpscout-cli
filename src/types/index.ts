@@ -115,6 +115,29 @@ export interface Thread {
   openedAt?: string;
 }
 
+export interface DraftReply {
+  threadId: number;
+  conversationId: number;
+  type: 'message';
+  state: 'draft';
+  status?: string;
+  body: string;
+  preview: string;
+  createdAt: string;
+  createdBy?: Thread['createdBy'];
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+}
+
+export interface DraftReplyWriteResult {
+  conversationId: number;
+  threadId: number;
+  action: 'created' | 'updated';
+  verified: true;
+  draft: DraftReply;
+}
+
 export interface AttachmentDownload {
   data: Uint8Array;
   contentType?: string;

@@ -23,6 +23,10 @@ describe('Help Scout MCP server helpers', () => {
       expect.arrayContaining([
         'get_conversation',
         'get_conversation_threads',
+        'list_draft_replies',
+        'create_draft_reply',
+        'update_draft_reply',
+        'upsert_draft_reply',
         'download_attachment',
         'update_conversation_status',
         'create_note',
@@ -48,5 +52,33 @@ describe('Help Scout MCP server helpers', () => {
     const parsed = mcpServer.getThreadSchemaForTesting().parse(thread);
 
     expect(parsed.action?.associatedEntities).toEqual({ mailboxIds: [42] });
+  });
+
+  it('accepts only verified unsent message drafts in lifecycle outputs', () => {
+    const { draftReplyWriteOutputSchema } = mcpServer.getDraftReplySchemasForTesting();
+    const result = {
+      success: true as const,
+      conversationId: 123,
+      threadId: 456,
+      action: 'updated' as const,
+      verified: true as const,
+      draft: {
+        conversationId: 123,
+        threadId: 456,
+        type: 'message' as const,
+        state: 'draft' as const,
+        body: 'Desired text',
+        preview: 'Desired text',
+        createdAt: '2026-08-12T00:00:00Z',
+      },
+    };
+
+    expect(draftReplyWriteOutputSchema.parse(result)).toEqual(result);
+    expect(() =>
+      draftReplyWriteOutputSchema.parse({
+        ...result,
+        draft: { ...result.draft, state: 'published' },
+      })
+    ).toThrow();
   });
 });

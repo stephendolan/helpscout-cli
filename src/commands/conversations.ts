@@ -337,11 +337,12 @@ export function createConversationsCommand(): Command {
   cmd
     .command('draft-reply')
     .description(
-      'Create a draft reply on an existing conversation (never sends — review and send from the Help Scout UI)'
+      'Upsert a draft reply (never sends; refuses ambiguous multiple-draft conversations)'
     )
     .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
     .requiredOption('--text <text>', 'Reply text')
     .option('--user <id>', 'User ID authoring the draft')
+    .option('--thread-id <id>', 'Explicit draft thread ID to update')
     .action(
       withErrorHandling(
         async (
@@ -349,16 +350,89 @@ export function createConversationsCommand(): Command {
           options: {
             text: string;
             user?: string;
+            threadId?: string;
           }
         ) => {
-          await client.createDraftReply(await client.resolveConversationId(id), {
+          const result = await client.upsertDraftReply(await client.resolveConversationId(id), {
             text: options.text,
             user: options.user ? parseIdArg(options.user, 'user') : undefined,
+            threadId: options.threadId ? parseIdArg(options.threadId, 'thread') : undefined,
           });
-          outputJson({ message: 'Draft reply created' });
+          outputJson({ message: `Draft reply ${result.action}`, ...result });
         }
       )
     );
+
+  const draftReplies = new Command('draft-replies').description(
+    'Manage unsent draft replies; these commands never publish or send'
+  );
+
+  draftReplies
+    .command('list')
+    .description('List active draft replies with thread IDs, metadata, and body previews')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#"')
+    .action(
+      withErrorHandling(async (id: string) => {
+        const conversationId = await client.resolveConversationId(id);
+        const drafts = await client.listDraftReplies(conversationId);
+        outputJson({ conversationId, drafts, total: drafts.length });
+      })
+    );
+
+  draftReplies
+    .command('create')
+    .description('Create a new unsent draft reply and verify its Resource-ID thread')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#"')
+    .requiredOption('--text <text>', 'Reply text')
+    .option('--user <id>', 'User ID authoring the draft')
+    .action(
+      withErrorHandling(async (id: string, options: { text: string; user?: string }) => {
+        const result = await client.createDraftReply(await client.resolveConversationId(id), {
+          text: options.text,
+          user: options.user ? parseIdArg(options.user, 'user') : undefined,
+        });
+        outputJson({ message: 'Draft reply created', ...result });
+      })
+    );
+
+  draftReplies
+    .command('update')
+    .description('Update one specific unsent draft reply in place and verify it')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#"')
+    .argument('<threadId>', 'Draft reply thread ID')
+    .requiredOption('--text <text>', 'Replacement reply text')
+    .action(
+      withErrorHandling(async (id: string, threadId: string, options: { text: string }) => {
+        const result = await client.updateDraftReply(
+          await client.resolveConversationId(id),
+          parseIdArg(threadId, 'thread'),
+          options.text
+        );
+        outputJson({ message: 'Draft reply updated', ...result });
+      })
+    );
+
+  draftReplies
+    .command('upsert')
+    .description('Update the sole active draft or create one when none exists')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#"')
+    .requiredOption('--text <text>', 'Reply text')
+    .option('--thread-id <id>', 'Explicit draft thread ID to update')
+    .option('--user <id>', 'User ID authoring a newly created draft')
+    .action(
+      withErrorHandling(
+        async (id: string, options: { text: string; threadId?: string; user?: string }) => {
+          const result = await client.upsertDraftReply(await client.resolveConversationId(id), {
+            text: options.text,
+            threadId: options.threadId ? parseIdArg(options.threadId, 'thread') : undefined,
+            user: options.user ? parseIdArg(options.user, 'user') : undefined,
+          });
+          outputJson({ message: `Draft reply ${result.action}`, ...result });
+        }
+      )
+    );
+
+  cmd.addCommand(draftReplies);
 
   cmd
     .command('draft-conversation')

@@ -44,12 +44,17 @@ helpscout conversations threads 456
 helpscout conversations threads 456 --type customer  # Filter by type
 helpscout conversations threads 456 --html          # HTML output
 helpscout conversations threads 456 --include-notes
+helpscout conversations draft-replies list 456
+helpscout conversations draft-replies create 456 --text "Unsent draft"
+helpscout conversations draft-replies update 456 987654 --text "Revised unsent draft"
+helpscout conversations draft-replies upsert 456 --text "Desired unsent draft"
+helpscout conversations draft-replies upsert 456 --thread-id 987654 --text "Chosen draft"
+helpscout conversations draft-reply 456 --text "Desired unsent draft" # shorthand for upsert
 helpscout conversations attachments download 456 789
 helpscout conversations attachments download 456 789 --output ./invoice.pdf
 helpscout conversations attachments download 456 789 --output ./downloads/
 helpscout conversations attachments download 456 789 --force
 helpscout conversations status 456 closed
-helpscout conversations reply 456 --text "Thanks for reaching out!"
 helpscout conversations note 456 --text "Internal note"
 helpscout conversations add-tag 456 urgent
 helpscout conversations remove-tag 456 urgent
@@ -110,6 +115,10 @@ The MCP server exposes:
 - Typed tools for Help Scout search, full conversation detail, full conversation thread history, attachment downloads, mailbox/customer/user lookup, and safe draft-note/status mutations
 - `get_conversation` accepts internal conversation IDs or visible ticket numbers like `#12345`
 - `get_conversation_threads` returns all Help Scout thread types by default, including notes, workflow events, status events, and other system events returned by Help Scout
+- `list_draft_replies` returns active unsent reply drafts with thread IDs, bodies/previews, recipients, authors, and timestamps
+- `create_draft_reply` intentionally creates an additional unsent draft and returns its verified Help Scout `Resource-ID` thread ID
+- `update_draft_reply` replaces `/text` only after verifying the selected thread is still an unsent reply draft, then verifies the live result
+- `upsert_draft_reply` updates the sole active draft or creates one when none exists; it refuses multiple drafts unless `threadId` explicitly selects one
 - `download_attachment` saves a conversation attachment to disk, using the Help Scout filename by default and requiring `force` before overwriting existing files
 - `update_conversation_status` safely changes ticket status, with `open` normalized to Help Scout's `active` status
 - `create_note` adds private notes and can optionally set the ticket status, such as closing no-action tickets
@@ -118,6 +127,14 @@ The MCP server exposes:
 - Prompt templates for `summarize_ticket` and `draft_reply`
 
 Read-only tools include MCP annotations so hosts can distinguish them from mutating tools, and core read/query tools return structured outputs alongside readable JSON text.
+
+### Draft reply safety
+
+All draft-reply commands and MCP tools preserve the never-send boundary: they only list drafts, create with `draft: true`, or replace a draft thread's `/text`. Every create/update re-reads Help Scout and returns success only when the intended thread is still a draft with the requested text.
+
+`draft-replies upsert` and the legacy `draft-reply` shorthand are the recommended write paths. With zero active drafts they create one; with one they update it in place; with multiple they refuse and print the candidate thread IDs. Pass `--thread-id` (or MCP `threadId`) only after selecting the intended draft from `draft-replies list` / `list_draft_replies`.
+
+Help Scout's official Inbox API does not expose an endpoint to delete or discard a draft reply thread. Discard unwanted drafts in the Help Scout web UI.
 
 ## Options
 

@@ -18,4 +18,21 @@ describe('conversations command', () => {
       '-f, --force',
     ]);
   });
+
+  it('registers complete safe draft-reply lifecycle commands', () => {
+    const conversations = createConversationsCommand();
+    const legacyUpsert = conversations.commands.find((command) => command.name() === 'draft-reply');
+    const drafts = conversations.commands.find((command) => command.name() === 'draft-replies');
+
+    expect(legacyUpsert?.options.map((option) => option.flags)).toContain('--thread-id <id>');
+    expect(drafts?.commands.map((command) => command.name())).toEqual([
+      'list',
+      'create',
+      'update',
+      'upsert',
+    ]);
+    expect(
+      drafts?.commands.find((command) => command.name() === 'update')?.registeredArguments
+    ).toHaveLength(2);
+  });
 });

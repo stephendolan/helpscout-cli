@@ -489,6 +489,36 @@ const conversationThreadsOutputSchema = z.object({
   filtered_types: z.array(z.string()).optional(),
 });
 
+const draftReplySchema = z.object({
+  threadId: z.number(),
+  conversationId: z.number(),
+  type: z.literal('message'),
+  state: z.literal('draft'),
+  status: z.string().optional(),
+  body: z.string(),
+  preview: z.string(),
+  createdAt: z.string(),
+  createdBy: personSchema.optional(),
+  to: z.array(z.string()).optional(),
+  cc: z.array(z.string()).optional(),
+  bcc: z.array(z.string()).optional(),
+});
+
+const listDraftRepliesOutputSchema = z.object({
+  conversationId: z.number(),
+  drafts: z.array(draftReplySchema),
+  total: z.number(),
+});
+
+const draftReplyWriteOutputSchema = z.object({
+  success: z.literal(true),
+  conversationId: z.number(),
+  threadId: z.number(),
+  action: z.enum(['created', 'updated']),
+  verified: z.literal(true),
+  draft: draftReplySchema,
+});
+
 const attachmentDownloadOutputSchema = z.object({
   message: z.literal('Attachment downloaded'),
   conversationId: z.number(),
@@ -652,6 +682,11 @@ export function getRegisteredToolsForTesting() {
 /** Exposed for tests guarding the thread output schema against over-strict nesting. */
 export function getThreadSchemaForTesting() {
   return threadSchema;
+}
+
+/** Exposed for tests guarding the MCP draft lifecycle output contract. */
+export function getDraftReplySchemasForTesting() {
+  return { draftReplySchema, listDraftRepliesOutputSchema, draftReplyWriteOutputSchema };
 }
 
 const dateFilterSchema = {
@@ -1343,26 +1378,102 @@ server.registerTool(
 );
 
 rememberTool(
+  'list_draft_replies',
+  'List active unsent draft replies for a conversation, including thread IDs, body previews, and author metadata.'
+);
+server.registerTool(
+  'list_draft_replies',
+  {
+    title: 'List Draft Replies',
+    description:
+      'List active unsent draft replies for a conversation, including thread IDs, body previews, and author metadata. This tool never sends or changes anything.',
+    inputSchema: { conversationId: conversationRefSchema },
+    outputSchema: listDraftRepliesOutputSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
+  async ({ conversationId: conversationRef }) => {
+    const conversationId = await client.resolveConversationId(conversationRef);
+    const drafts = await client.listDraftReplies(conversationId);
+    return structuredJsonResult({ conversationId, drafts, total: drafts.length });
+  }
+);
+
+rememberTool(
   'create_draft_reply',
-  'Create a draft reply on an existing conversation (saves without sending). Use this when responding to an existing ticket — the draft is reviewed and sent from the Help Scout UI. For starting a brand-new outbound conversation, use create_draft_conversation instead.'
+  'Create an additional draft reply on an existing conversation and verify its returned thread ID (saves without sending). Prefer upsert_draft_reply when duplicate drafts are not intended.'
 );
 server.registerTool(
   'create_draft_reply',
   {
     title: 'Create Draft Reply',
     description:
-      'Create a draft reply on an existing conversation (saves without sending). Use this when responding to an existing ticket — the draft is reviewed and sent from the Help Scout UI. For starting a brand-new outbound conversation, use create_draft_conversation instead.',
+      'Create an additional draft reply on an existing conversation and verify its returned Resource-ID thread (saves without sending). Prefer upsert_draft_reply when duplicate drafts are not intended. This tool cannot publish or send.',
     inputSchema: {
       conversationId: conversationRefSchema,
       text: z.string().describe('Draft reply text content (HTML or plain text)'),
     },
-    outputSchema: conversationActionOutputSchema,
+    outputSchema: draftReplyWriteOutputSchema,
     annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId: conversationRef, text }) => {
     const conversationId = await client.resolveConversationId(conversationRef);
-    await client.createDraftReply(conversationId, { text });
-    return structuredJsonResult({ success: true, conversationId });
+    const result = await client.createDraftReply(conversationId, { text });
+    return structuredJsonResult({ success: true, ...result });
+  }
+);
+
+rememberTool(
+  'update_draft_reply',
+  'Update one explicitly identified unsent draft reply in place and verify the final text. Refuses non-draft threads and never sends.'
+);
+server.registerTool(
+  'update_draft_reply',
+  {
+    title: 'Update Draft Reply',
+    description:
+      'Update one explicitly identified unsent draft reply in place and verify the final text. Refuses missing, published, or non-reply threads. This tool cannot publish or send.',
+    inputSchema: {
+      conversationId: conversationRefSchema,
+      threadId: z.number().int().positive().describe('Existing draft reply thread ID'),
+      text: z.string().describe('Replacement draft text (HTML or plain text)'),
+    },
+    outputSchema: draftReplyWriteOutputSchema,
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+  },
+  async ({ conversationId: conversationRef, threadId, text }) => {
+    const conversationId = await client.resolveConversationId(conversationRef);
+    const result = await client.updateDraftReply(conversationId, threadId, text);
+    return structuredJsonResult({ success: true, ...result });
+  }
+);
+
+rememberTool(
+  'upsert_draft_reply',
+  'Safely update the sole active draft reply or create one when none exists. Refuses multiple drafts unless threadId explicitly selects one; never sends.'
+);
+server.registerTool(
+  'upsert_draft_reply',
+  {
+    title: 'Upsert Draft Reply',
+    description:
+      'Safely update the sole active draft reply or create one when none exists. Refuses to choose among multiple drafts unless threadId explicitly selects one. Verifies the final text and cannot publish or send.',
+    inputSchema: {
+      conversationId: conversationRefSchema,
+      text: z.string().describe('Desired draft text (HTML or plain text)'),
+      threadId: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('Explicit draft thread ID, required only to disambiguate multiple drafts'),
+    },
+    outputSchema: draftReplyWriteOutputSchema,
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+  },
+  async ({ conversationId: conversationRef, text, threadId }) => {
+    const conversationId = await client.resolveConversationId(conversationRef);
+    const result = await client.upsertDraftReply(conversationId, { text, threadId });
+    return structuredJsonResult({ success: true, ...result });
   }
 );
 
