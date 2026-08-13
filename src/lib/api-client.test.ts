@@ -54,6 +54,13 @@ function paginatedConversations(
   });
 }
 
+function paginatedResource(resource: string) {
+  return Response.json({
+    _embedded: { [resource]: [] },
+    page: { size: 0, totalElements: 0, totalPages: 0, number: 1 },
+  });
+}
+
 describe('HelpScoutClient', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   let client: HelpScoutClient;
@@ -234,6 +241,69 @@ describe('HelpScoutClient', () => {
       expect(url.searchParams.get('status')).toBe('active');
       expect(url.searchParams.get('query')).toBe('assigned:"Questionnaires"');
     }
+  });
+
+  it.each([
+    {
+      name: 'customers',
+      resource: 'customers',
+      path: '/customers',
+      invoke: () =>
+        client.listCustomers({
+          mailbox: '42',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          sortField: 'modifiedAt',
+          sortOrder: 'asc',
+          page: 3,
+          query: 'email:ada@example.com',
+        }),
+      expected: {
+        mailbox: '42',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        sortField: 'modifiedAt',
+        sortOrder: 'asc',
+        page: '3',
+        query: 'email:ada@example.com',
+      },
+    },
+    {
+      name: 'users',
+      resource: 'users',
+      path: '/users',
+      invoke: () => client.listUsers({ email: 'ada@example.com', mailbox: 42, page: 2 }),
+      expected: { email: 'ada@example.com', mailbox: '42', page: '2' },
+    },
+    {
+      name: 'tags',
+      resource: 'tags',
+      path: '/tags',
+      invoke: () => client.listTags(4),
+      expected: { page: '4' },
+    },
+    {
+      name: 'workflows',
+      resource: 'workflows',
+      path: '/workflows',
+      invoke: () => client.listWorkflows({ mailbox: 42, type: 'manual', page: 5 }),
+      expected: { mailboxId: '42', type: 'manual', page: '5' },
+    },
+    {
+      name: 'mailboxes',
+      resource: 'mailboxes',
+      path: '/mailboxes',
+      invoke: () => client.listMailboxes(6),
+      expected: { page: '6' },
+    },
+  ])('serializes the $name list endpoint with its exact wire contract', async (testCase) => {
+    fetchMock.mockResolvedValueOnce(paginatedResource(testCase.resource));
+
+    await testCase.invoke();
+
+    const url = new URL(fetchMock.mock.calls[0][0]);
+    expect(url.pathname).toBe(`/v2${testCase.path}`);
+    expect(Object.fromEntries(url.searchParams)).toEqual(testCase.expected);
   });
 
   it('creates a draft reply, parses Resource-ID, and verifies the live thread', async () => {

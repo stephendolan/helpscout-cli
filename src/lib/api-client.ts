@@ -272,11 +272,22 @@ export class HelpScoutClient {
       query?: string;
     } = {}
   ) {
-    const { assignedTo, ...wireParams } = params;
     const response = await this.request<PaginatedResponse<{ conversations: Conversation[] }>>(
       'GET',
       '/conversations',
-      { params: { ...wireParams, assigned_to: assignedTo } }
+      {
+        params: {
+          mailbox: params.mailbox,
+          status: params.status,
+          tag: params.tag,
+          assigned_to: params.assignedTo,
+          sortField: params.sortField,
+          sortOrder: params.sortOrder,
+          page: params.page,
+          embed: params.embed,
+          query: params.query,
+        },
+      }
     );
     return {
       conversations: response._embedded?.conversations || [],
@@ -620,7 +631,17 @@ export class HelpScoutClient {
     const response = await this.request<PaginatedResponse<{ customers: Customer[] }>>(
       'GET',
       '/customers',
-      { params }
+      {
+        params: {
+          mailbox: params.mailbox,
+          firstName: params.firstName,
+          lastName: params.lastName,
+          sortField: params.sortField,
+          sortOrder: params.sortOrder,
+          page: params.page,
+          query: params.query,
+        },
+      }
     );
     return {
       customers: response._embedded?.customers || [],
@@ -662,7 +683,7 @@ export class HelpScoutClient {
   // Users
   async listUsers(params: { email?: string; mailbox?: number; page?: number } = {}) {
     const response = await this.request<PaginatedResponse<{ users: User[] }>>('GET', '/users', {
-      params,
+      params: { email: params.email, mailbox: params.mailbox, page: params.page },
     });
     return {
       users: response._embedded?.users || [],
@@ -677,7 +698,7 @@ export class HelpScoutClient {
   // Tags
   async listTags(page?: number) {
     const response = await this.request<PaginatedResponse<{ tags: Tag[] }>>('GET', '/tags', {
-      params: page ? { page } : undefined,
+      params: { page },
     });
     return {
       tags: response._embedded?.tags || [],
@@ -719,7 +740,7 @@ export class HelpScoutClient {
     const response = await this.request<PaginatedResponse<{ mailboxes: Mailbox[] }>>(
       'GET',
       '/mailboxes',
-      { params: page ? { page } : undefined }
+      { params: { page } }
     );
     return {
       mailboxes: response._embedded?.mailboxes || [],
