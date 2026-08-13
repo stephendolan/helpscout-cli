@@ -494,7 +494,7 @@ const draftReplySchema = z.object({
   conversationId: z.number(),
   type: z.literal('message'),
   state: z.literal('draft'),
-  status: z.string().optional(),
+  status: z.literal('active'),
   body: z.string(),
   preview: z.string(),
   createdAt: z.string(),

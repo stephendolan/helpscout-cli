@@ -1,5 +1,6 @@
 import { auth } from './auth.js';
 import { HelpScoutCliError, HelpScoutApiError } from './errors.js';
+import { normalizeBodyText } from './output.js';
 import type {
   Conversation,
   ConversationStatus,
@@ -44,13 +45,18 @@ const DRAFT_PREVIEW_LENGTH = 300;
 
 function isDraftReply(
   thread: Thread
-): thread is Thread & { type: 'message'; state: 'draft'; body: string } {
-  return thread.type === 'message' && thread.state === 'draft' && typeof thread.body === 'string';
+): thread is Thread & { type: 'message'; state: 'draft'; status: 'active'; body: string } {
+  return (
+    thread.type === 'message' &&
+    thread.state === 'draft' &&
+    thread.status === 'active' &&
+    typeof thread.body === 'string'
+  );
 }
 
 function toDraftReply(
   conversationId: number,
-  thread: Thread & { type: 'message'; state: 'draft'; body: string }
+  thread: Thread & { type: 'message'; state: 'draft'; status: 'active'; body: string }
 ): DraftReply {
   const preview =
     thread.body.length > DRAFT_PREVIEW_LENGTH
@@ -475,7 +481,7 @@ export class HelpScoutClient {
     }
     if (!isDraftReply(thread)) {
       throw new HelpScoutCliError(
-        `Refusing to update thread ${threadId}: expected a draft reply (type message, state draft), found type ${thread.type}, state ${thread.state ?? 'unknown'}`,
+        `Refusing to update thread ${threadId}: expected an active draft reply (type message, state draft, status active), found type ${thread.type}, state ${thread.state ?? 'unknown'}, status ${thread.status ?? 'unknown'}`,
         409
       );
     }
@@ -517,7 +523,11 @@ export class HelpScoutClient {
   ): Promise<DraftReplyWriteResult> {
     const threads = await this.getConversationThreads(conversationId);
     const thread = threads.find((candidate) => candidate.id === threadId);
-    if (!thread || !isDraftReply(thread) || thread.body !== expectedText) {
+    if (
+      !thread ||
+      !isDraftReply(thread) ||
+      normalizeBodyText(thread.body) !== normalizeBodyText(expectedText)
+    ) {
       throw new HelpScoutCliError(
         `Draft reply ${action} but post-write verification failed for thread ${threadId}: expected an unsent draft with the requested text`,
         502

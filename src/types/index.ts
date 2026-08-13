@@ -120,7 +120,7 @@ export interface DraftReply {
   conversationId: number;
   type: 'message';
   state: 'draft';
-  status?: string;
+  status: 'active';
   body: string;
   preview: string;
   createdAt: string;

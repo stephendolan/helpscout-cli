@@ -67,6 +67,7 @@ describe('Help Scout MCP server helpers', () => {
         threadId: 456,
         type: 'message' as const,
         state: 'draft' as const,
+        status: 'active' as const,
         body: 'Desired text',
         preview: 'Desired text',
         createdAt: '2026-08-12T00:00:00Z',
@@ -78,6 +79,12 @@ describe('Help Scout MCP server helpers', () => {
       draftReplyWriteOutputSchema.parse({
         ...result,
         draft: { ...result.draft, state: 'published' },
+      })
+    ).toThrow();
+    expect(() =>
+      draftReplyWriteOutputSchema.parse({
+        ...result,
+        draft: { ...result.draft, status: 'pending' },
       })
     ).toThrow();
   });

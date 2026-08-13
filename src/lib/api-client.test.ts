@@ -222,6 +222,7 @@ describe('HelpScoutClient', () => {
           draftThread(11, longBody),
           { ...thread(12, 'message'), state: 'published' },
           thread(13, 'note'),
+          { ...draftThread(14), status: 'pending' },
         ],
         1,
         1
@@ -263,12 +264,53 @@ describe('HelpScoutClient', () => {
     );
   });
 
+  it('verifies plain-text newlines after Help Scout converts them to br tags', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, 'First line<br>Second line')], 1, 1)
+      );
+
+    await expect(client.updateDraftReply(123, 11, 'First line\nSecond line')).resolves.toEqual(
+      expect.objectContaining({ verified: true })
+    );
+  });
+
+  it('verifies semantically equivalent HTML input', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, '<p>Hello <strong>there</strong></p>')], 1, 1)
+      );
+
+    await expect(client.updateDraftReply(123, 11, 'Hello <strong>there</strong>')).resolves.toEqual(
+      expect.objectContaining({ verified: true })
+    );
+  });
+
+  it('normalizes whitespace and newlines during verification', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, '<p>Hello there</p><p>Next line</p>')], 1, 1)
+      );
+
+    await expect(
+      client.updateDraftReply(123, 11, '  Hello   there\r\n\nNext line  ')
+    ).resolves.toEqual(expect.objectContaining({ verified: true }));
+  });
+
   it('refuses to update a published or non-draft thread', async () => {
     fetchMock.mockResolvedValueOnce(
       paginatedThreads([{ ...thread(11, 'message'), state: 'published' }], 1, 1)
     );
 
-    await expect(client.updateDraftReply(123, 11, 'New')).rejects.toThrow('expected a draft reply');
+    await expect(client.updateDraftReply(123, 11, 'New')).rejects.toThrow(
+      'expected an active draft reply'
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -335,6 +377,23 @@ describe('HelpScoutClient', () => {
       .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1));
+
+    await expect(client.updateDraftReply(123, 11, 'Desired')).rejects.toThrow(
+      'post-write verification failed'
+    );
+  });
+
+  it.each([
+    ['published state', { state: 'published' }],
+    ['inactive status', { status: 'pending' }],
+    ['non-message type', { type: 'note' }],
+  ])('rejects post-write verification for %s', async (_label, override) => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([{ ...draftThread(11, 'Desired'), ...override }], 1, 1)
+      );
 
     await expect(client.updateDraftReply(123, 11, 'Desired')).rejects.toThrow(
       'post-write verification failed'

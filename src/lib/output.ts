@@ -27,6 +27,11 @@ export function htmlToPlainText(html: string): string {
     .trim();
 }
 
+/** Compare message bodies after Help Scout's HTML and whitespace normalization. */
+export function normalizeBodyText(body: string): string {
+  return htmlToPlainText(body).replace(/\s+/g, ' ').trim();
+}
+
 function convertBodiesToPlainText(data: unknown): unknown {
   if (Array.isArray(data)) {
     return data.map(convertBodiesToPlainText);
