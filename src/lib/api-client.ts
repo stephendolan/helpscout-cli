@@ -272,10 +272,11 @@ export class HelpScoutClient {
       query?: string;
     } = {}
   ) {
+    const { assignedTo, ...wireParams } = params;
     const response = await this.request<PaginatedResponse<{ conversations: Conversation[] }>>(
       'GET',
       '/conversations',
-      { params }
+      { params: { ...wireParams, assigned_to: assignedTo } }
     );
     return {
       conversations: response._embedded?.conversations || [],

@@ -892,7 +892,7 @@ server.registerTool(
         .describe('Conversation status filter (defaults to "all" to include resolved tickets)'),
       mailbox: z.string().optional().describe('Mailbox ID to filter by'),
       tag: z.string().optional().describe('Tag to filter by'),
-      assignedTo: z.string().optional().describe('User ID assigned to'),
+      assignedTo: z.string().optional().describe('User or team ID assigned to'),
       query: z
         .string()
         .optional()

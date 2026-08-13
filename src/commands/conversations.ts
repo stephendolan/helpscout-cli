@@ -128,7 +128,7 @@ export function createConversationsCommand(): Command {
     .option('-m, --mailbox <id>', 'Filter by mailbox ID')
     .option('-s, --status <status>', 'Filter by status (active, all, closed, open, pending, spam)')
     .option('-t, --tag <tags>', 'Filter by tag(s), comma-separated')
-    .option('--assigned-to <id>', 'Filter by assignee user ID')
+    .option('--assigned-to <id>', 'Filter by assignee user or team ID')
     .option('--created-since <date>', 'Show conversations created after this date')
     .option('--created-before <date>', 'Show conversations created before this date')
     .option('--modified-since <date>', 'Show conversations modified after this date')

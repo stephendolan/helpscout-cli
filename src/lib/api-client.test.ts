@@ -38,6 +38,22 @@ function paginatedThreads(
   });
 }
 
+function paginatedConversations(
+  conversations: Array<Record<string, unknown>>,
+  page: number,
+  totalPages: number
+) {
+  return Response.json({
+    _embedded: { conversations },
+    page: {
+      size: conversations.length,
+      totalElements: totalPages,
+      totalPages,
+      number: page,
+    },
+  });
+}
+
 describe('HelpScoutClient', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   let client: HelpScoutClient;
@@ -162,6 +178,62 @@ describe('HelpScoutClient', () => {
         body: JSON.stringify({ op: 'replace', path: '/status', value: 'closed' }),
       })
     );
+  });
+
+  it('serializes the idiomatic assignee option to the Help Scout wire name', async () => {
+    fetchMock.mockResolvedValueOnce(paginatedConversations([], 1, 1));
+
+    await client.listConversations({ assignedTo: '728656' });
+
+    const url = new URL(fetchMock.mock.calls[0][0]);
+    expect(url.searchParams.get('assigned_to')).toBe('728656');
+    expect(url.searchParams.has('assignedTo')).toBe(false);
+  });
+
+  it('preserves status, sort, query, and page while mapping a team assignee ID', async () => {
+    fetchMock.mockResolvedValueOnce(paginatedConversations([], 3, 3));
+
+    await client.listConversations({
+      status: 'all',
+      assignedTo: '987654',
+      sortField: 'modifiedAt',
+      sortOrder: 'asc',
+      query: 'assigned:"Questionnaires"',
+      page: 3,
+    });
+
+    const url = new URL(fetchMock.mock.calls[0][0]);
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      status: 'all',
+      assigned_to: '987654',
+      sortField: 'modifiedAt',
+      sortOrder: 'asc',
+      query: 'assigned:"Questionnaires"',
+      page: '3',
+    });
+  });
+
+  it('keeps the mapped assignee filter on every conversation page', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedConversations([{ id: 1 }], 1, 2))
+      .mockResolvedValueOnce(paginatedConversations([{ id: 2 }], 2, 2));
+
+    const conversations = await client.listAllConversations({
+      status: 'active',
+      assignedTo: '728656',
+      query: 'assigned:"Questionnaires"',
+    });
+
+    expect(conversations).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [index, call] of fetchMock.mock.calls.entries()) {
+      const url = new URL(call[0]);
+      expect(url.searchParams.get('assigned_to')).toBe('728656');
+      expect(url.searchParams.has('assignedTo')).toBe(false);
+      expect(url.searchParams.get('page')).toBe(String(index + 1));
+      expect(url.searchParams.get('status')).toBe('active');
+      expect(url.searchParams.get('query')).toBe('assigned:"Questionnaires"');
+    }
   });
 
   it('creates a draft reply, parses Resource-ID, and verifies the live thread', async () => {
