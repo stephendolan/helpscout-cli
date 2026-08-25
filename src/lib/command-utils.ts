@@ -13,8 +13,9 @@ export function withErrorHandling<T extends unknown[], R>(
 }
 
 export function parseIdArg(value: string, resourceType: string = 'resource'): number {
-  const parsed = parseInt(value, 10);
-  if (isNaN(parsed) || parsed <= 0) {
+  const normalized = value.trim();
+  const parsed = /^\d+$/.test(normalized) ? Number(normalized) : NaN;
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new HelpScoutCliError(`Invalid ${resourceType} ID: "${value}"`, 400);
   }
   return parsed;

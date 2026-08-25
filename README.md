@@ -55,6 +55,8 @@ helpscout conversations attachments download 456 789 --output ./invoice.pdf
 helpscout conversations attachments download 456 789 --output ./downloads/
 helpscout conversations attachments download 456 789 --force
 helpscout conversations status 456 closed
+helpscout conversations assign 456 789          # Assign to a Help Scout user or team ID
+helpscout conversations assign 456 --unassign   # Remove the current assignee
 helpscout conversations note 456 --text "Internal note"
 helpscout conversations add-tag 456 urgent
 helpscout conversations remove-tag 456 urgent
@@ -121,6 +123,7 @@ The MCP server exposes:
 - `upsert_draft_reply` updates the sole active draft or creates one when none exists; it refuses multiple drafts unless `threadId` explicitly selects one
 - `download_attachment` saves a conversation attachment to disk, using the Help Scout filename by default and requiring `force` before overwriting existing files
 - `update_conversation_status` safely changes ticket status, with `open` normalized to Help Scout's `active` status
+- `assign_conversation` assigns or reassigns a ticket to a Help Scout user or team ID; pass `null` as `assigneeId` to unassign it
 - `create_note` adds private notes and can optionally set the ticket status, such as closing no-action tickets
 - User lookup tools expose Help Scout mention handles for composing `@mention` references
 - Resource templates for `helpscout://conversation/{conversationId}`, `helpscout://customer/{customerId}`, and `helpscout://user/{userId}`

@@ -426,6 +426,15 @@ export class HelpScoutClient {
     });
   }
 
+  async updateConversationAssignee(conversationId: number, assigneeId: number | null) {
+    await this.updateConversation(
+      conversationId,
+      assigneeId === null
+        ? { op: 'remove', path: '/assignTo' }
+        : { op: 'replace', path: '/assignTo', value: assigneeId }
+    );
+  }
+
   async deleteConversation(conversationId: number) {
     await this.request<void>('DELETE', `/conversations/${conversationId}`);
   }
