@@ -5,6 +5,7 @@ import { outputJson, htmlToPlainText, buildName } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
 import { buildDateQuery } from '../lib/dates.js';
 import { normalizeConversationStatus } from '../lib/conversation-status.js';
+import { HelpScoutCliError } from '../lib/errors.js';
 import type { Conversation, DraftConversationStatus, Thread } from '../types/index.js';
 
 interface ParticipantInfo {
@@ -308,6 +309,36 @@ export function createConversationsCommand(): Command {
         );
         outputJson({ message: 'Conversation status updated', status: normalizedStatus });
       })
+    );
+
+  cmd
+    .command('assign')
+    .description('Assign or reassign a conversation to a Help Scout user or team')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
+    .argument('[assigneeId]', 'Help Scout user or team ID')
+    .option('--unassign', 'Remove the current conversation assignee')
+    .action(
+      withErrorHandling(
+        async (id: string, assigneeId: string | undefined, options: { unassign?: boolean }) => {
+          if (Boolean(options.unassign) === (assigneeId !== undefined)) {
+            throw new HelpScoutCliError(
+              options.unassign
+                ? 'Provide either an assignee ID or --unassign, not both'
+                : 'Provide a Help Scout user or team ID, or pass --unassign',
+              400
+            );
+          }
+
+          const targetId = options.unassign ? null : parseIdArg(assigneeId!, 'assignee');
+          const conversationId = await client.resolveConversationId(id);
+          await client.updateConversationAssignee(conversationId, targetId);
+          outputJson({
+            message: targetId === null ? 'Conversation unassigned' : 'Conversation assigned',
+            conversationId,
+            assigneeId: targetId,
+          });
+        }
+      )
     );
 
   cmd

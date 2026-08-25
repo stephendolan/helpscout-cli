@@ -602,6 +602,10 @@ const conversationStatusOutputSchema = conversationActionOutputSchema.extend({
   status: z.enum(['active', 'pending', 'closed', 'spam']),
 });
 
+const conversationAssigneeOutputSchema = conversationActionOutputSchema.extend({
+  assigneeId: z.number().int().positive().nullable(),
+});
+
 const noteOutputSchema = conversationActionOutputSchema.extend({
   status: z.enum(['active', 'pending', 'closed', 'spam']).optional(),
 });
@@ -677,6 +681,10 @@ function rememberTool(name: string, description: string) {
 
 export function getRegisteredToolsForTesting() {
   return [...toolRegistry];
+}
+
+export function getMcpServerForTesting() {
+  return server;
 }
 
 /** Exposed for tests guarding the thread output schema against over-strict nesting. */
@@ -1543,6 +1551,36 @@ server.registerTool(
     const normalizedStatus = normalizeConversationStatus(status);
     await client.updateConversationStatus(conversationId, normalizedStatus);
     return structuredJsonResult({ success: true, conversationId, status: normalizedStatus });
+  }
+);
+
+rememberTool(
+  'assign_conversation',
+  'Assign or reassign a conversation to a Help Scout user or team by assignee ID, or unassign it.'
+);
+server.registerTool(
+  'assign_conversation',
+  {
+    title: 'Assign Conversation',
+    description:
+      'Assign or reassign a conversation to a Help Scout user or team by assignee ID. Set assigneeId to null to remove the current assignee.',
+    inputSchema: {
+      conversationId: conversationRefSchema,
+      assigneeId: z
+        .number()
+        .int()
+        .positive()
+        .max(Number.MAX_SAFE_INTEGER)
+        .nullable()
+        .describe('Help Scout user or team ID; use null to unassign the conversation'),
+    },
+    outputSchema: conversationAssigneeOutputSchema,
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+  },
+  async ({ conversationId: conversationRef, assigneeId }) => {
+    const conversationId = await client.resolveConversationId(conversationRef);
+    await client.updateConversationAssignee(conversationId, assigneeId);
+    return structuredJsonResult({ success: true, conversationId, assigneeId });
   }
 );
 

@@ -187,6 +187,34 @@ describe('HelpScoutClient', () => {
     );
   });
 
+  it('assigns a conversation to a user or team with the official JSON Patch shape', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await client.updateConversationAssignee(123, 456);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.helpscout.net/v2/conversations/123',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ op: 'replace', path: '/assignTo', value: 456 }),
+      })
+    );
+  });
+
+  it('unassigns a conversation with the official remove operation and no value', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await client.updateConversationAssignee(123, null);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.helpscout.net/v2/conversations/123',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ op: 'remove', path: '/assignTo' }),
+      })
+    );
+  });
+
   it('serializes the idiomatic assignee option to the Help Scout wire name', async () => {
     fetchMock.mockResolvedValueOnce(paginatedConversations([], 1, 1));
 
