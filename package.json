@@ -45,7 +45,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@napi-rs/keyring": "^1.2.0",
+    "@napi-rs/keyring": "^2.0.0",
     "commander": "^15.0.0",
     "conf": "^15.0.2",
     "dayjs": "^1.11.19",
@@ -62,7 +62,7 @@
     "tsup": "^8.0.0",
     "tsx": "^4.7.0",
     "typescript": "^7.0.2",
-    "vitest": "^4.0.4"
+    "vitest": "^5.0.0"
   },
   "engines": {
     "bun": ">=1.0.0"
