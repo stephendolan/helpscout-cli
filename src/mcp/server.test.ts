@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { client as helpScoutClient } from '../lib/api-client.js';
+import type { Conversation } from '../types/index.js';
 
 let mcpServer: typeof import('./server.js');
 let testClient: Client;
@@ -145,6 +146,87 @@ describe('Help Scout MCP server helpers', () => {
     const parsed = mcpServer.getThreadSchemaForTesting().parse(thread);
 
     expect(parsed.action?.associatedEntities).toEqual({ mailboxIds: [42] });
+  });
+
+  // Help Scout's conversation list/search embed returns custom fields as
+  // { id, name, value, text } with no `type`, so the shared conversation output
+  // schema must not require it (#56).
+  describe('conversations whose custom fields come from the embed', () => {
+    const conversation: Conversation = {
+      id: 123,
+      number: 48172,
+      threads: 1,
+      type: 'email',
+      folderId: 1,
+      status: 'active',
+      state: 'published',
+      subject: 'Audio Hijack license',
+      preview: 'Hi there',
+      mailboxId: 1,
+      createdAt: '2026-06-23T00:00:00Z',
+      customFields: [{ id: 23657, name: 'App', value: '116013', text: 'Audio Hijack' }],
+    };
+
+    function expectEmbeddedCustomFields(result: Awaited<ReturnType<Client['callTool']>>) {
+      expect(result.isError).toBeFalsy();
+      const content = result.structuredContent as {
+        conversations?: Array<{ customFields?: unknown }>;
+        conversation?: { customFields?: unknown };
+      };
+      const returned = content.conversation ?? content.conversations?.[0];
+      expect(returned?.customFields).toEqual(conversation.customFields);
+    }
+
+    it.each([
+      ['search_conversations', {}],
+      ['search_by_customer', { email: 'someone@example.com' }],
+    ])('returns them from %s', async (name, args) => {
+      const listAllConversations = vi
+        .spyOn(helpScoutClient, 'listAllConversations')
+        .mockResolvedValue([conversation]);
+
+      try {
+        expectEmbeddedCustomFields(await testClient.callTool({ name, arguments: args }));
+      } finally {
+        listAllConversations.mockRestore();
+      }
+    });
+
+    it('returns them from list_conversations', async () => {
+      const listConversations = vi.spyOn(helpScoutClient, 'listConversations').mockResolvedValue({
+        conversations: [conversation],
+        page: { size: 25, totalElements: 1, totalPages: 1, number: 1 },
+      });
+
+      try {
+        expectEmbeddedCustomFields(
+          await testClient.callTool({ name: 'list_conversations', arguments: {} })
+        );
+      } finally {
+        listConversations.mockRestore();
+      }
+    });
+
+    it('returns them from get_conversation', async () => {
+      const resolveConversationId = vi
+        .spyOn(helpScoutClient, 'resolveConversationId')
+        .mockResolvedValue(123);
+      const getConversation = vi
+        .spyOn(helpScoutClient, 'getConversation')
+        .mockResolvedValue(conversation);
+
+      try {
+        expectEmbeddedCustomFields(
+          await testClient.callTool({
+            name: 'get_conversation',
+            arguments: { conversationId: 123 },
+          })
+        );
+      } finally {
+        getConversation.mockRestore();
+        resolveConversationId.mockRestore();
+      }
+    });
   });
 
   it('accepts only verified unsent message drafts in lifecycle outputs', () => {

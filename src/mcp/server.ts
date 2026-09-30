@@ -271,7 +271,10 @@ const customFieldSchema = z
     id: z.number().optional(),
     name: z.string(),
     value: z.string(),
-    type: z.string(),
+    // The conversation list/search embed omits `type` (only the field-definition
+    // endpoints carry it) and adds `text`, the human-readable label for `value`.
+    type: z.string().optional(),
+    text: z.string().optional(),
   })
   .passthrough();
 

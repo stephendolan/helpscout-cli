@@ -258,7 +258,8 @@ export interface CustomField {
   id: number;
   name: string;
   value: string;
-  type: string;
+  type?: string;
+  text?: string;
 }
 
 export interface Mailbox {
