@@ -164,7 +164,10 @@ describe('Help Scout MCP server helpers', () => {
       preview: 'Hi there',
       mailboxId: 1,
       createdAt: '2026-06-23T00:00:00Z',
-      customFields: [{ id: 23657, name: 'App', value: '116013', text: 'Audio Hijack' }],
+      customFields: [
+        { id: 23657, name: 'App', value: '116013', text: 'Audio Hijack' },
+        { id: 23658, name: 'Plan', value: 'Pro', type: 'text' },
+      ],
     };
 
     function expectEmbeddedCustomFields(result: Awaited<ReturnType<Client['callTool']>>) {
